@@ -355,8 +355,7 @@ function App() {
     if (!selectedChannel) return;
 
     try {
-      console.log('Fetching messages for channel ID:', selectedChannel.id);
-      console.log('Selected channel:', selectedChannel);
+      console.log('Fetching messages for channel:', selectedChannel.id); // Debug log
 
       const { data, error } = await supabase
         .from('messages')
@@ -377,17 +376,24 @@ function App() {
         .order('created_at', { ascending: true });
 
       if (error) {
-        console.error('Error details:', error);
+        console.error('Error details:', error); // Debug log
         throw error;
       }
 
-      console.log('Raw messages data:', data);
-      
+      console.log('Fetched messages:', data); // Debug log
+
       const processedData = data.map(message => {
-        console.log('Processing message:', message);
+        const groupedReactions = (message.reactions || []).reduce((acc, reaction) => {
+          acc[reaction.emoji] = (acc[reaction.emoji] || 0) + 1;
+          return acc;
+        }, {});
+
         return {
           ...message,
-          reactions: message.reactions || []
+          reactions: Object.entries(groupedReactions).map(([emoji, count]) => ({
+            emoji,
+            count
+          }))
         };
       });
 
@@ -634,15 +640,7 @@ function App() {
   const handleChannelSelect = (channel) => {
     console.log('Selecting channel:', channel); // Debug log
     setSelectedChannel(channel);
-    fetchMessages(); // Add this to fetch messages immediately when channel is selected
   };
-
-  useEffect(() => {
-    if (selectedChannel) {
-      console.log('Selected channel changed to:', selectedChannel);
-      fetchMessages();
-    }
-  }, [selectedChannel]);
 
   return (
     <div className="flex h-screen">
@@ -675,7 +673,7 @@ function App() {
               {channels.map(channel => (
                 <button
                   key={channel.id}
-                  onClick={() => handleChannelSelect(channel)}
+                  onClick={() => setSelectedChannel(channel)}
                   className={`w-full text-left px-2 py-1 rounded text-gray-300 hover:bg-purple-800 ${
                     selectedChannel?.id === channel.id ? 'bg-purple-700' : ''
                   }`}
