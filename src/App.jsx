@@ -49,6 +49,19 @@ function App() {
   const [selectedFile, setSelectedFile] = useState(null)
   const fileInputRef = useRef(null)
 
+  // Add ref for messages container
+  const messagesEndRef = useRef(null)
+
+  // Function to scroll to bottom
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ block: "end" })
+  }
+
+  // Add useEffect to scroll when messages change
+  useEffect(() => {
+    scrollToBottom()
+  }, [messages])
+
   // Function to handle cursor position changes
   const handleCursorChange = (e) => {
     setCursorPosition(e.target.selectionStart)
@@ -298,7 +311,10 @@ function App() {
         }, 
         (payload) => {
           if (payload.eventType === 'INSERT') {
-            setMessages(currentMessages => [...currentMessages, payload.new])
+            // Only add the message if it belongs to the current channel
+            if (payload.new.channel_id === selectedChannel.id) {
+              setMessages(currentMessages => [...currentMessages, payload.new])
+            }
           } else if (payload.eventType === 'DELETE') {
             setMessages(currentMessages => 
               currentMessages.filter(message => message.id !== payload.old.id)
@@ -307,6 +323,9 @@ function App() {
         }
       )
       .subscribe()
+
+    // Fetch existing messages when channel changes
+    fetchMessages();
 
     // Subscribe to reactions
     const reactionSubscription = supabase
@@ -355,16 +374,13 @@ function App() {
     if (!selectedChannel) return;
 
     try {
-      console.log('Fetching messages for channel:', selectedChannel.id); // Debug log
+      console.log('Fetching messages for channel:', selectedChannel.id);
 
-      const { data, error } = await supabase
+      // Fetch messages first
+      const { data: messagesData, error: messagesError } = await supabase
         .from('messages')
         .select(`
           *,
-          profiles!messages_user_id_fkey (
-            full_name,
-            avatar_url
-          ),
           reactions (
             id,
             emoji,
@@ -375,14 +391,41 @@ function App() {
         .is('deleted_at', null)
         .order('created_at', { ascending: true });
 
-      if (error) {
-        console.error('Error details:', error); // Debug log
-        throw error;
+      if (messagesError) {
+        console.error('Error details:', messagesError);
+        throw messagesError;
       }
 
-      console.log('Fetched messages:', data); // Debug log
+      // Get unique user IDs from messages
+      const userIds = [...new Set(messagesData.map(message => message.user_id))];
 
-      const processedData = data.map(message => {
+      // Fetch user profiles
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('*')
+        .in('user_id', userIds);
+
+      if (profilesError) {
+        console.error('Error fetching profiles:', profilesError);
+        throw profilesError;
+      }
+
+      // Get auth users data
+      const { data: authUsersData, error: authUsersError } = await supabase
+        .from('auth.users')
+        .select('id, email')
+        .in('id', userIds);
+
+      if (authUsersError) {
+        console.error('Error fetching auth users:', authUsersError);
+        // Don't throw here, we can still proceed with profiles data
+      }
+
+      // Combine the data
+      const processedData = messagesData.map(message => {
+        const userProfile = profilesData?.find(profile => profile.user_id === message.user_id);
+        const authUser = authUsersData?.find(user => user.id === message.user_id);
+        
         const groupedReactions = (message.reactions || []).reduce((acc, reaction) => {
           acc[reaction.emoji] = (acc[reaction.emoji] || 0) + 1;
           return acc;
@@ -390,6 +433,10 @@ function App() {
 
         return {
           ...message,
+          profiles: userProfile || { 
+            full_name: authUser?.email?.split('@')[0] || 'Anonymous',
+            avatar_url: null 
+          },
           reactions: Object.entries(groupedReactions).map(([emoji, count]) => ({
             emoji,
             count
@@ -397,6 +444,7 @@ function App() {
         };
       });
 
+      console.log('Processed messages:', processedData);
       setMessages(processedData);
     } catch (error) {
       console.error('Error fetching messages:', error);
@@ -640,6 +688,8 @@ function App() {
   const handleChannelSelect = (channel) => {
     console.log('Selecting channel:', channel); // Debug log
     setSelectedChannel(channel);
+    setMessages([]); // Clear messages when switching channels
+    // Messages will be fetched by the useEffect hook when selectedChannel changes
   };
 
   return (
@@ -668,12 +718,10 @@ function App() {
           <div className="px-3 py-4">
             <h2 className="text-sm font-medium mb-2 text-gray-300">Channels</h2>
             <div className="space-y-1">
-              {/* Old channels mapping (kept for reference) */}
-              {/*dummyChannels.map(channel => (*/}
               {channels.map(channel => (
                 <button
                   key={channel.id}
-                  onClick={() => setSelectedChannel(channel)}
+                  onClick={() => handleChannelSelect(channel)}
                   className={`w-full text-left px-2 py-1 rounded text-gray-300 hover:bg-purple-800 ${
                     selectedChannel?.id === channel.id ? 'bg-purple-700' : ''
                   }`}
@@ -1007,6 +1055,8 @@ function App() {
                 )}
               </div>
             ))}
+            {/* Add div for scrolling reference */}
+            <div ref={messagesEndRef} />
           </div>
 
           {/* Message Input */}
