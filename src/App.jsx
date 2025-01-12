@@ -172,6 +172,7 @@ function App() {
     e.preventDefault()
     const messageContent = getCombinedText()
     if (!messageContent.trim()) return
+    if (!selectedChannel) return
 
     try {
       // First check if user is a member of the channel
@@ -208,9 +209,11 @@ function App() {
 
       if (error) throw error
       
+      // Clear input after successful send
       setTextSegments([{ text: '', isBold: false, isItalic: false, isStrikethrough: false }])
       setIsTextBold(false)
       setIsTextItalic(false)
+      setIsTextStrikethrough(false)
     } catch (error) {
       console.error('Error sending message:', error)
     }
@@ -309,11 +312,53 @@ function App() {
           table: 'messages',
           filter: `channel_id=eq.${selectedChannel.id}`
         }, 
-        (payload) => {
+        async (payload) => {
           if (payload.eventType === 'INSERT') {
-            // Only add the message if it belongs to the current channel
+            // Only process if it belongs to the current channel
             if (payload.new.channel_id === selectedChannel.id) {
-              setMessages(currentMessages => [...currentMessages, payload.new])
+              try {
+                // Fetch the user's profile
+                const { data: profileData, error: profileError } = await supabase
+                  .from('profiles')
+                  .select('*')
+                  .eq('user_id', payload.new.user_id)
+                  .single();
+
+                if (profileError) {
+                  console.error('Error fetching profile:', profileError);
+                }
+
+                // Fetch auth user as fallback
+                const { data: authUser, error: authError } = await supabase
+                  .from('auth.users')
+                  .select('id, email')
+                  .eq('id', payload.new.user_id)
+                  .single();
+
+                if (authError) {
+                  console.error('Error fetching auth user:', authError);
+                }
+
+                // Create enriched message
+                const enrichedMessage = {
+                  ...payload.new,
+                  profiles: profileData || {
+                    full_name: authUser?.email?.split('@')[0] || 'Anonymous',
+                    avatar_url: null
+                  },
+                  reactions: []
+                };
+
+                setMessages(currentMessages => [...currentMessages, enrichedMessage]);
+              } catch (error) {
+                console.error('Error processing new message:', error);
+                // Still add the message even if profile fetch fails
+                setMessages(currentMessages => [...currentMessages, {
+                  ...payload.new,
+                  profiles: { full_name: 'Anonymous', avatar_url: null },
+                  reactions: []
+                }]);
+              }
             }
           } else if (payload.eventType === 'DELETE') {
             setMessages(currentMessages => 
@@ -410,7 +455,10 @@ function App() {
         throw profilesError;
       }
 
-      // Get auth users data
+      // Create a map of user profiles for faster lookup
+      const profileMap = new Map(profilesData.map(profile => [profile.user_id, profile]));
+
+      // Get auth users data for fallback
       const { data: authUsersData, error: authUsersError } = await supabase
         .from('auth.users')
         .select('id, email')
@@ -421,10 +469,13 @@ function App() {
         // Don't throw here, we can still proceed with profiles data
       }
 
+      // Create a map of auth users for faster lookup
+      const authUserMap = new Map(authUsersData?.map(user => [user.id, user]) || []);
+
       // Combine the data
       const processedData = messagesData.map(message => {
-        const userProfile = profilesData?.find(profile => profile.user_id === message.user_id);
-        const authUser = authUsersData?.find(user => user.id === message.user_id);
+        const userProfile = profileMap.get(message.user_id);
+        const authUser = authUserMap.get(message.user_id);
         
         const groupedReactions = (message.reactions || []).reduce((acc, reaction) => {
           acc[reaction.emoji] = (acc[reaction.emoji] || 0) + 1;
@@ -647,13 +698,16 @@ function App() {
       const { error } = await supabase
         .from('profiles')
         .update({ full_name: editedName })
-        .eq('id', user.id)
+        .eq('user_id', user.id)
 
       if (error) throw error
 
       // Update local state
       setUserProfile(prev => ({ ...prev, full_name: editedName }))
       setIsEditingName(false)
+      
+      // Refresh messages to show updated name
+      fetchMessages()
     } catch (error) {
       console.error('Error updating name:', error)
     }
@@ -1065,6 +1119,7 @@ function App() {
             placeholder={`Message #${selectedChannel?.name}`}
             isTextBold={isTextBold}
             isTextItalic={isTextItalic}
+            isTextStrikethrough={isTextStrikethrough}
             handleTextInput={handleTextInput}
             getCombinedText={getCombinedText}
             handleUtilityClick={handleUtilityClick}
@@ -1074,6 +1129,9 @@ function App() {
             inputRef={inputRef}
             fileInputRef={fileInputRef}
             handleFileSelect={handleFileSelect}
+            handleBoldClick={() => setIsTextBold(!isTextBold)}
+            handleItalicClick={() => setIsTextItalic(!isTextItalic)}
+            handleStrikethroughClick={() => setIsTextStrikethrough(!isTextStrikethrough)}
           />
         </div>
 
@@ -1088,9 +1146,9 @@ function App() {
             <h2 className="font-bold">Thread</h2>
             <button 
               onClick={() => setShowThreadSidebar(false)}
-              className="p-1 hover:bg-gray-100 rounded"
+              className="p-2 hover:bg-gray-100 rounded text-gray-600"
             >
-              <Icons.Close />
+              ✕
             </button>
           </div>
 
@@ -1291,9 +1349,9 @@ function App() {
           <h2 className="font-bold">Profile</h2>
           <button 
             onClick={() => setShowProfileSidebar(false)}
-            className="p-1 hover:bg-gray-100 rounded"
+            className="p-2 hover:bg-gray-100 rounded text-gray-600"
           >
-            <Icons.Close />
+            ✕
           </button>
         </div>
 

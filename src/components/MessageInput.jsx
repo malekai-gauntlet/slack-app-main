@@ -8,6 +8,7 @@ export default function MessageInput({
   placeholder = "Message", 
   isTextBold,
   isTextItalic,
+  isTextStrikethrough,
   handleTextInput,
   getCombinedText,
   handleUtilityClick,
@@ -16,20 +17,101 @@ export default function MessageInput({
   onEmojiClick,
   inputRef,
   fileInputRef,
-  handleFileSelect
+  handleFileSelect,
+  handleBoldClick,
+  handleItalicClick,
+  handleStrikethroughClick
 }) {
   const emojiPickerRef = useRef(null)
 
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      onSendMessage(e)
+    }
+  }
+
   return (
     <div className="flex flex-col">
-      <div className="border rounded-md flex">
+      <div className="flex items-center h-10 px-2 border-b border-gray-200">
+        <div className="flex items-center space-x-1">
+          <button
+            type="button"
+            className={`w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100 ${isTextBold ? 'bg-gray-100' : ''}`}
+            title="Bold"
+            onClick={handleBoldClick}
+          >
+            <span className="font-bold text-gray-600">B</span>
+          </button>
+          <button
+            type="button"
+            className={`w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100 ${isTextItalic ? 'bg-gray-100' : ''}`}
+            title="Italic"
+            onClick={handleItalicClick}
+          >
+            <span className="italic text-gray-600">I</span>
+          </button>
+          <button
+            type="button"
+            className={`w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100 ${isTextStrikethrough ? 'bg-gray-100' : ''}`}
+            title="Strikethrough"
+            onClick={handleStrikethroughClick}
+          >
+            <span className="line-through text-gray-600">S</span>
+          </button>
+          <div className="h-4 w-px bg-gray-200 mx-1"></div>
+          <button
+            type="button"
+            className="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100"
+            title="Link"
+            onClick={handleUtilityClick}
+          >
+            <Icons.Link className="w-4 h-4 text-gray-600" />
+          </button>
+          <button
+            type="button"
+            className="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100"
+            title="Numbered List"
+            onClick={handleUtilityClick}
+          >
+            <Icons.NumberedList className="w-4 h-4 text-gray-600" />
+          </button>
+          <button
+            type="button"
+            className="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100"
+            title="Bulleted List"
+            onClick={handleUtilityClick}
+          >
+            <Icons.BulletedList className="w-4 h-4 text-gray-600" />
+          </button>
+          <button
+            type="button"
+            className="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100"
+            title="Code Block"
+            onClick={handleUtilityClick}
+          >
+            <Icons.CodeBlock className="w-4 h-4 text-gray-600" />
+          </button>
+          <button
+            type="button"
+            className="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100"
+            title="Quote"
+            onClick={handleUtilityClick}
+          >
+            <Icons.Quote className="w-4 h-4 text-gray-600" />
+          </button>
+        </div>
+      </div>
+
+      <div className="border rounded-md flex mt-2">
         <input
           ref={inputRef}
           type="text"
           value={getCombinedText()}
           onChange={handleTextInput}
+          onKeyDown={handleKeyDown}
           placeholder={placeholder}
-          className={`flex-1 px-4 py-2 focus:outline-none ${isTextBold ? 'font-bold' : ''} ${isTextItalic ? 'italic' : ''}`}
+          className={`flex-1 px-4 py-2 focus:outline-none ${isTextBold ? 'font-bold' : ''} ${isTextItalic ? 'italic' : ''} ${isTextStrikethrough ? 'line-through' : ''}`}
         />
         <button
           type="submit"
@@ -39,7 +121,8 @@ export default function MessageInput({
           Send
         </button>
       </div>
-      <div className="flex items-center space-x-3 mt-2 text-gray-500">
+
+      <div className="flex items-center space-x-2 mt-2 text-gray-500">
         <input
           type="file"
           ref={fileInputRef}
@@ -48,20 +131,20 @@ export default function MessageInput({
         />
         <button
           type="button"
-          className="p-1 hover:bg-gray-100 rounded"
+          className="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100"
           title="Add files"
           onClick={(e) => handleUtilityClick(e, 'file')}
         >
-          <Icons.Attachment />
+          <Icons.Attachment className="w-4 h-4" />
         </button>
         <div className="relative">
           <button
             type="button"
-            className={`p-1 hover:bg-gray-100 rounded ${showEmojiPicker ? 'bg-gray-200' : ''}`}
+            className={`w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100 ${showEmojiPicker ? 'bg-gray-100' : ''}`}
             title="Add emoji"
             onClick={handleEmojiButtonClick}
           >
-            <Icons.Emoji />
+            <Icons.Emoji className="w-4 h-4" />
           </button>
           {showEmojiPicker && (
             <div ref={emojiPickerRef} className="absolute bottom-full mb-2">
@@ -76,19 +159,19 @@ export default function MessageInput({
         </div>
         <button
           type="button"
-          className="p-1 hover:bg-gray-100 rounded"
+          className="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100"
           title="Mention someone"
           onClick={handleUtilityClick}
         >
-          <Icons.Mention />
+          <Icons.Mention className="w-4 h-4" />
         </button>
         <button
           type="button"
-          className="p-1 hover:bg-gray-100 rounded"
+          className="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100"
           title="Record audio"
           onClick={handleUtilityClick}
         >
-          <Icons.Audio />
+          <Icons.Audio className="w-4 h-4" />
         </button>
       </div>
     </div>
