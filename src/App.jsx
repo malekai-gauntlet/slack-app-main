@@ -48,6 +48,48 @@ function App() {
   const nameInputRef = useRef(null)
   const [selectedFile, setSelectedFile] = useState(null)
   const fileInputRef = useRef(null)
+  const [showCreateChannel, setShowCreateChannel] = useState(false)
+  const [newChannelName, setNewChannelName] = useState('')
+  const [isCreatingChannel, setIsCreatingChannel] = useState(false)
+  // Add state for channel context menu
+  const [contextMenu, setContextMenu] = useState({
+    show: false,
+    x: 0,
+    y: 0,
+    channelId: null
+  })
+  // Add state for muted channels
+  const [mutedChannels, setMutedChannels] = useState(new Set())
+  // Add state for unread channels
+  const [unreadChannels, setUnreadChannels] = useState(new Set())
+
+  // Add ref for context menu
+  const contextMenuRef = useRef(null)
+
+  // Add useEffect to handle clicking outside context menu
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (contextMenuRef.current && !contextMenuRef.current.contains(event.target)) {
+        setContextMenu({ show: false, x: 0, y: 0, channelId: null })
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [])
+
+  // Add handler for channel context menu
+  const handleChannelContextMenu = (e, channelId) => {
+    e.preventDefault() // Prevent default context menu
+    setContextMenu({
+      show: true,
+      x: e.pageX,
+      y: e.pageY,
+      channelId
+    })
+  }
 
   // Add ref for messages container
   const messagesEndRef = useRef(null)
@@ -309,12 +351,11 @@ function App() {
         {
           event: '*',
           schema: 'public',
-          table: 'messages',
-          filter: `channel_id=eq.${selectedChannel.id}`
+          table: 'messages'
         }, 
         async (payload) => {
           if (payload.eventType === 'INSERT') {
-            // Only process if it belongs to the current channel
+            // If the message is for the current channel, add it to messages
             if (payload.new.channel_id === selectedChannel.id) {
               try {
                 // Fetch the user's profile
@@ -352,18 +393,30 @@ function App() {
                 setMessages(currentMessages => [...currentMessages, enrichedMessage]);
               } catch (error) {
                 console.error('Error processing new message:', error);
-                // Still add the message even if profile fetch fails
                 setMessages(currentMessages => [...currentMessages, {
                   ...payload.new,
                   profiles: { full_name: 'Anonymous', avatar_url: null },
                   reactions: []
                 }]);
               }
+            } else {
+              // Message is for a different channel, mark it as unread if not muted
+              if (!mutedChannels.has(payload.new.channel_id)) {
+                console.log('Marking channel as unread:', payload.new.channel_id);
+                setUnreadChannels(prev => {
+                  const newUnread = new Set(prev);
+                  newUnread.add(payload.new.channel_id);
+                  return newUnread;
+                });
+              }
             }
           } else if (payload.eventType === 'DELETE') {
-            setMessages(currentMessages => 
-              currentMessages.filter(message => message.id !== payload.old.id)
-            )
+            // Only remove messages from the current view
+            if (payload.old.channel_id === selectedChannel.id) {
+              setMessages(currentMessages => 
+                currentMessages.filter(message => message.id !== payload.old.id)
+              );
+            }
           }
         }
       )
@@ -738,13 +791,69 @@ function App() {
     }
   }
 
+  // Add function to mark channel as read
+  const markChannelAsRead = (channelId) => {
+    setUnreadChannels(prev => {
+      const newUnread = new Set(prev)
+      newUnread.delete(channelId)
+      return newUnread
+    })
+  }
+
   // Update the channel selection handler
   const handleChannelSelect = (channel) => {
-    console.log('Selecting channel:', channel); // Debug log
-    setSelectedChannel(channel);
-    setMessages([]); // Clear messages when switching channels
-    // Messages will be fetched by the useEffect hook when selectedChannel changes
-  };
+    console.log('Selecting channel:', channel)
+    setSelectedChannel(channel)
+    setMessages([]) // Clear messages when switching channels
+    // Mark the channel as read when selected
+    markChannelAsRead(channel.id)
+  }
+
+  // Add handler for creating a new channel
+  const handleCreateChannel = async () => {
+    try {
+      setIsCreatingChannel(true)
+      const { data, error } = await supabase
+        .from('channels')
+        .insert([
+          {
+            name: newChannelName,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          }
+        ])
+        .select('*')
+        .single()
+
+      if (error) throw error
+
+      // Add the new channel to the channels list
+      setChannels(prev => [...prev, data])
+      // Select the new channel
+      setSelectedChannel(data)
+      // Close the modal and reset the input
+      setShowCreateChannel(false)
+      setNewChannelName('')
+    } catch (error) {
+      console.error('Error creating channel:', error)
+    } finally {
+      setIsCreatingChannel(false)
+    }
+  }
+
+  // Add handler for muting channels
+  const handleMuteChannel = (channelId) => {
+    setMutedChannels(prev => {
+      const newMuted = new Set(prev)
+      if (newMuted.has(channelId)) {
+        newMuted.delete(channelId)
+      } else {
+        newMuted.add(channelId)
+      }
+      return newMuted
+    })
+    setContextMenu({ show: false, x: 0, y: 0, channelId: null })
+  }
 
   return (
     <div className="flex h-screen">
@@ -770,22 +879,139 @@ function App() {
         {/* Channels Section */}
         <div className={`flex-1 overflow-y-auto ${!isSidebarOpen && 'opacity-0'}`}>
           <div className="px-3 py-4">
-            <h2 className="text-sm font-medium mb-2 text-gray-300">Channels</h2>
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-sm font-medium text-gray-300">Channels</h2>
+              <button
+                onClick={() => setShowCreateChannel(true)}
+                className="text-gray-300 hover:text-white text-lg font-medium"
+                title="Create Channel"
+              >
+                +
+              </button>
+            </div>
             <div className="space-y-1">
               {channels.map(channel => (
                 <button
                   key={channel.id}
                   onClick={() => handleChannelSelect(channel)}
+                  onContextMenu={(e) => handleChannelContextMenu(e, channel.id)}
                   className={`w-full text-left px-2 py-1 rounded text-gray-300 hover:bg-purple-800 ${
                     selectedChannel?.id === channel.id ? 'bg-purple-700' : ''
+                  } flex items-center justify-between ${
+                    unreadChannels.has(channel.id) ? 'font-bold' : ''
                   }`}
                 >
-                  # {channel.name}
+                  <span># {channel.name}</span>
+                  <div className="flex items-center space-x-1">
+                    {unreadChannels.has(channel.id) && !mutedChannels.has(channel.id) && (
+                      <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                    )}
+                    {mutedChannels.has(channel.id) && (
+                      <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                      </svg>
+                    )}
+                  </div>
                 </button>
               ))}
             </div>
+
+            {/* Channel Context Menu */}
+            {contextMenu.show && (
+              <div
+                ref={contextMenuRef}
+                style={{
+                  position: 'fixed',
+                  top: contextMenu.y,
+                  left: contextMenu.x,
+                  zIndex: 1000
+                }}
+                className="bg-white rounded-lg shadow-lg border border-gray-200 py-1 w-48"
+              >
+                <button 
+                  onClick={() => handleMuteChannel(contextMenu.channelId)}
+                  className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm text-gray-900 flex items-center justify-between"
+                >
+                  <span>{mutedChannels.has(contextMenu.channelId) ? 'Unmute channel' : 'Mute channel'}</span>
+                  {mutedChannels.has(contextMenu.channelId) && (
+                    <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                </button>
+                <button className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm text-red-600">
+                  Leave channel
+                </button>
+              </div>
+            )}
           </div>
         </div>
+
+        {/* Create Channel Modal */}
+        {showCreateChannel && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg w-[480px] shadow-xl">
+              {/* Modal Header */}
+              <div className="px-6 py-4 border-b">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-gray-900">Create a channel</h3>
+                  <button
+                    onClick={() => setShowCreateChannel(false)}
+                    className="text-gray-400 hover:text-gray-500"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+
+              {/* Modal Body */}
+              <div className="px-6 py-4">
+                <div className="mb-4">
+                  <p className="text-sm text-gray-600 mb-4">
+                    Channels are where your team communicates. They're best when organized around a topic — #marketing, for example.
+                  </p>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Channel name
+                  </label>
+                  <div className="relative">
+                    <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500">
+                      #
+                    </span>
+                    <input
+                      type="text"
+                      value={newChannelName}
+                      onChange={(e) => setNewChannelName(e.target.value.toLowerCase().replace(/\s+/g, '-'))}
+                      className="block w-full pl-8 pr-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-purple-500 focus:border-purple-500 sm:text-sm text-gray-900"
+                      placeholder="e.g. marketing"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="px-6 py-4 bg-gray-50 rounded-b-lg flex justify-end space-x-3">
+                <button
+                  onClick={() => setShowCreateChannel(false)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-md"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleCreateChannel}
+                  disabled={!newChannelName.trim() || isCreatingChannel}
+                  className={`px-4 py-2 text-sm font-medium text-white rounded-md ${
+                    !newChannelName.trim() || isCreatingChannel
+                      ? 'bg-purple-400 cursor-not-allowed'
+                      : 'bg-purple-600 hover:bg-purple-700'
+                  }`}
+                >
+                  {isCreatingChannel ? 'Creating...' : 'Create Channel'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Main Content + Thread Sidebar Container */}
