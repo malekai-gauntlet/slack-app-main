@@ -1,20 +1,28 @@
-import { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { supabase } from './supabaseClient'
 import { useAuth } from './contexts/AuthContext'
 import Auth from './components/Auth'
 import EmojiPicker from 'emoji-picker-react'
 import MessageInput from './components/MessageInput'
 import { Icons } from './components/icons'
-
+import DirectMessagesList from './components/DirectMessagesList'
+import ChannelsList from './components/ChannelsList'
+import ProfileMenu from './components/ProfileMenu'
+import ThreadSidebar from './components/ThreadSidebar'
+import AIChatSidebar from './components/AIChatSidebar'
+import MessageList from './components/MessageList'
+import ProfileSidebar from './components/ProfileSidebar'
+import CreateChannelModal from './components/CreateChannelModal'
+import AddDMModal from './components/AddDMModal'
 
 
 
 const navItems = [
   { id: 1, name: 'Messages', icon: '💬' },
-  { id: 2, name: 'Add canvas', icon: '📝' },
-  { id: 3, name: 'Bookmarks', icon: '🔖' },
-  { id: 4, name: 'Pins', icon: '📌' },
-  { id: 5, name: 'Files', icon: '📁' },
+  // { id: 2, name: 'Add canvas', icon: '📝' },
+  // { id: 3, name: 'Bookmarks', icon: '🔖' },
+  // { id: 4, name: 'Pins', icon: '📌' }, 
+  // { id: 5, name: 'Files', icon: '📁' },
 ]
 
 function App() {
@@ -28,6 +36,11 @@ function App() {
   const [isTextBold, setIsTextBold] = useState(false)
   const [isTextItalic, setIsTextItalic] = useState(false)
   const [isTextStrikethrough, setIsTextStrikethrough] = useState(false)
+  const [users, setUsers] = useState([])
+  const [selectedDM, setSelectedDM] = useState(null)
+  const [showAddDM, setShowAddDM] = useState(false)
+  const [hiddenDMs, setHiddenDMs] = useState(new Set())
+  const [onlineUsers, setOnlineUsers] = useState(new Set())
   const inputRef = useRef(null)
   
   // Updated state for managing formatted text segments with bold, italic, and strikethrough
@@ -40,7 +53,10 @@ function App() {
   const [pickerPosition, setPickerPosition] = useState('top') // 'top' or 'bottom'
   const [showProfileMenu, setShowProfileMenu] = useState(false)
   const [showThreadSidebar, setShowThreadSidebar] = useState(false)
+  const [showAIChatSidebar, setShowAIChatSidebar] = useState(false)
   const [selectedMessage, setSelectedMessage] = useState(null)
+  const [isEditingStatus, setIsEditingStatus] = useState(false)
+  const [statusText, setStatusText] = useState('')
   const [threadMessages, setThreadMessages] = useState([])
   const [showProfileSidebar, setShowProfileSidebar] = useState(false)
   const [isEditingName, setIsEditingName] = useState(false)
@@ -48,6 +64,73 @@ function App() {
   const nameInputRef = useRef(null)
   const [selectedFile, setSelectedFile] = useState(null)
   const fileInputRef = useRef(null)
+  const [showCreateChannel, setShowCreateChannel] = useState(false)
+  const [newChannelName, setNewChannelName] = useState('')
+  const [isCreatingChannel, setIsCreatingChannel] = useState(false)
+  // Add state for channel context menu
+  const [contextMenu, setContextMenu] = useState({
+    show: false,
+    x: 0,
+    y: 0,
+    channelId: null
+  })
+  // Add state for DM context menu
+  const [dmContextMenu, setDmContextMenu] = useState({
+    show: false,
+    x: 0,
+    y: 0,
+    userId: null
+  })
+  // Add state for muted channels
+  const [mutedChannels, setMutedChannels] = useState(new Set())
+  // Add state for unread channels
+  const [unreadChannels, setUnreadChannels] = useState(new Set())
+  // Add state for unread DMs
+  const [unreadDMs, setUnreadDMs] = useState(new Set())
+
+  // Add ref for context menu
+  const contextMenuRef = useRef(null)
+  // Add ref for DM context menu
+  const dmContextMenuRef = useRef(null)
+
+  // Add useEffect to handle clicking outside context menu
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (contextMenuRef.current && !contextMenuRef.current.contains(event.target)) {
+        setContextMenu({ show: false, x: 0, y: 0, channelId: null })
+      }
+      if (dmContextMenuRef.current && !dmContextMenuRef.current.contains(event.target)) {
+        setDmContextMenu({ show: false, x: 0, y: 0, userId: null })
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [])
+
+  // Add handler for channel context menu
+  const handleChannelContextMenu = (e, channelId) => {
+    e.preventDefault() // Prevent default context menu
+    setContextMenu({
+      show: true,
+      x: e.pageX,
+      y: e.pageY,
+      channelId
+    })
+  }
+
+  // Add handler for DM context menu
+  const handleDMContextMenu = (e, userId) => {
+    e.preventDefault() // Prevent default context menu
+    setDmContextMenu({
+      show: true,
+      x: e.pageX,
+      y: e.pageY,
+      userId
+    })
+  }
 
   // Add ref for messages container
   const messagesEndRef = useRef(null)
@@ -70,30 +153,13 @@ function App() {
   // Function to handle text input
   const handleTextInput = (e) => {
     const newText = e.target.value
-    const currentPosition = e.target.selectionStart
-    
-    // Find the current segment
-    let totalLength = 0
-    let currentSegmentIndex = 0
-    
-    for (let i = 0; i < textSegments.length; i++) {
-      totalLength += textSegments[i].text.length
-      if (currentPosition <= totalLength) {
-        currentSegmentIndex = i
-        break
-      }
-    }
-
-    // Update the current segment
-    const newSegments = [...textSegments]
-    const currentSegment = newSegments[currentSegmentIndex]
-    currentSegment.text = newText.slice(
-      totalLength - currentSegment.text.length,
-      totalLength + (newText.length - getCombinedText().length)
-    )
-    
-    setTextSegments(newSegments)
-    setCursorPosition(currentPosition)
+    // Update the text segments with current formatting
+    setTextSegments([{
+      text: newText,
+      isBold: isTextBold,
+      isItalic: isTextItalic,
+      isStrikethrough: isTextStrikethrough
+    }])
   }
 
   // Function to handle formatting toggles
@@ -154,13 +220,13 @@ function App() {
   const formatMessageContent = (segments) => {
     return segments.map(segment => {
       let text = segment.text
-      if (segment.isBold) {
+      if (segment.isBold && text.trim()) {
         text = `**${text}**`
       }
-      if (segment.isItalic) {
+      if (segment.isItalic && text.trim()) {
         text = `_${text}_`
       }
-      if (segment.isStrikethrough) {
+      if (segment.isStrikethrough && text.trim()) {
         text = `~~${text}~~`
       }
       return text
@@ -170,50 +236,73 @@ function App() {
   // Modified message send handler
   async function handleSendMessage(e) {
     e.preventDefault()
-    const messageContent = getCombinedText()
-    if (!messageContent.trim()) return
-    if (!selectedChannel) return
+    const messageContent = formatMessageContent(textSegments)
+    if (!messageContent.trim() && !selectedFile) return
+    if (!selectedChannel && !selectedDM) return
 
     try {
-      // First check if user is a member of the channel
-      const { data: membership, error: membershipError } = await supabase
-        .from('memberships')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('channel_id', selectedChannel.id)
-        .single()
-
-      if (membershipError) {
-        // If not a member, add them
-        await supabase
-          .from('memberships')
-          .insert([
-            {
-              user_id: user.id,
-              channel_id: selectedChannel.id,
-              role: 'member'
-            }
-          ])
+      let messageData = {
+        content: messageContent,
+        user_id: user.id,
+        has_attachment: false
       }
 
-      // Send the message
+      // If there's a file, upload it first
+      if (selectedFile) {
+        const fileData = await uploadFile(selectedFile)
+        messageData = {
+          ...messageData,
+          has_attachment: true,
+          attachment_url: fileData.url,
+          attachment_name: fileData.name,
+          attachment_type: fileData.type,
+          attachment_size: fileData.size
+        }
+      }
+
+      if (selectedChannel) {
+        // First check if user is a member of the channel
+        const { data: membership, error: membershipError } = await supabase
+          .from('memberships')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('channel_id', selectedChannel.id)
+          .single()
+
+        if (membershipError) {
+          // If not a member, add them
+          await supabase
+            .from('memberships')
+            .insert([
+              {
+                user_id: user.id,
+                channel_id: selectedChannel.id,
+                role: 'member'
+              }
+            ])
+        }
+
+        messageData.channel_id = selectedChannel.id
+      } else {
+        // For DMs, set the dm_user_id
+        messageData.dm_user_id = selectedDM.user_id
+      }
+
       const { error } = await supabase
         .from('messages')
-        .insert([
-          {
-            content: messageContent,
-            channel_id: selectedChannel.id,
-            user_id: user.id
-          }
-        ])
+        .insert([messageData])
 
       if (error) throw error
       
-      // Clear input after successful send
+      // Clear input and file selection after successful send
       setTextSegments([{ text: '', isBold: false, isItalic: false, isStrikethrough: false }])
       setIsTextBold(false)
       setIsTextItalic(false)
       setIsTextStrikethrough(false)
+      setSelectedFile(null)
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
     } catch (error) {
       console.error('Error sending message:', error)
     }
@@ -258,6 +347,52 @@ function App() {
 
   useEffect(() => {
     fetchUserProfile()
+    fetchUsers()
+    
+    // Set up presence tracking
+    const channel = supabase.channel('online-users', {
+      config: {
+        presence: {
+          key: user.id,
+        },
+      },
+      retryIntervalMs: 5000,
+      retryAttempts: 10
+    })
+
+    channel.on('error', (error) => {
+      console.error('Supabase realtime error:', error)
+    })
+
+    // Handle presence changes
+    channel.on('presence', { event: 'sync' }, () => {
+      const presenceState = channel.presenceState()
+      const onlineUserIds = new Set(Object.keys(presenceState))
+      setOnlineUsers(onlineUserIds)
+    })
+
+    // Track window visibility changes
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        channel.untrack()
+      } else {
+        channel.track({ online_at: new Date().toISOString() })
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    // Join the channel and start tracking
+    channel.subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') {
+        await channel.track({ online_at: new Date().toISOString() })
+      }
+    })
+
+    return () => {
+      channel.unsubscribe()
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
   }, [user])
 
   async function fetchUserProfile() {
@@ -278,7 +413,8 @@ function App() {
           .insert([
             { 
               user_id: user.id, 
-              full_name: user.email?.split('@')[0] || 'Anonymous' 
+              full_name: user.email?.split('@')[0] || 'Anonymous',
+              status_text: ''
             }
           ])
           .select()
@@ -286,11 +422,28 @@ function App() {
 
         if (createError) throw createError
         setUserProfile(newProfile)
+        setStatusText(newProfile.status_text || '')
       } else {
         setUserProfile(data)
+        setStatusText(data.status_text || '')
       }
     } catch (error) {
       console.error('Error fetching/creating user profile:', error)
+    }
+  }
+
+  async function fetchUsers() {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .neq('user_id', user.id) // Exclude current user
+        .order('full_name')
+
+      if (error) throw error
+      setUsers(data)
+    } catch (error) {
+      console.error('Error fetching users:', error)
     }
   }
 
@@ -300,7 +453,7 @@ function App() {
   }, [])
 
   useEffect(() => {
-    if (!selectedChannel) return;
+    if (!selectedChannel && !selectedDM) return;
 
     // Subscribe to new messages
     const messageSubscription = supabase
@@ -309,13 +462,48 @@ function App() {
         {
           event: '*',
           schema: 'public',
-          table: 'messages',
-          filter: `channel_id=eq.${selectedChannel.id}`
+          table: 'messages'
         }, 
         async (payload) => {
           if (payload.eventType === 'INSERT') {
-            // Only process if it belongs to the current channel
-            if (payload.new.channel_id === selectedChannel.id) {
+            let shouldAddMessage = false;
+            
+            // For DMs, check if this is part of the current conversation
+            if (selectedDM) {
+              const isRelevantDM = (
+                // Message from current user to selected user
+                (payload.new.user_id === user.id && payload.new.dm_user_id === selectedDM.user_id) ||
+                // Message from selected user to current user
+                (payload.new.user_id === selectedDM.user_id && payload.new.dm_user_id === user.id)
+              );
+              
+              if (isRelevantDM) {
+                shouldAddMessage = true;
+              } else if (payload.new.dm_user_id === user.id) {
+                // If this is a DM to the current user but not from the currently selected conversation
+                // Mark it as unread
+                setUnreadDMs(prev => {
+                  const newUnread = new Set(prev);
+                  newUnread.add(payload.new.user_id);
+                  return newUnread;
+                });
+              }
+            } else if (payload.new.channel_id === selectedChannel.id) {
+              // For channels, check if message is for current channel
+              shouldAddMessage = true;
+            } else if (payload.new.channel_id) {
+              // Message is for a different channel, mark it as unread if not muted
+              if (!mutedChannels.has(payload.new.channel_id)) {
+                console.log('Marking channel as unread:', payload.new.channel_id);
+                setUnreadChannels(prev => {
+                  const newUnread = new Set(prev);
+                  newUnread.add(payload.new.channel_id);
+                  return newUnread;
+                });
+              }
+            }
+
+            if (shouldAddMessage) {
               try {
                 // Fetch the user's profile
                 const { data: profileData, error: profileError } = await supabase
@@ -328,22 +516,11 @@ function App() {
                   console.error('Error fetching profile:', profileError);
                 }
 
-                // Fetch auth user as fallback
-                const { data: authUser, error: authError } = await supabase
-                  .from('auth.users')
-                  .select('id, email')
-                  .eq('id', payload.new.user_id)
-                  .single();
-
-                if (authError) {
-                  console.error('Error fetching auth user:', authError);
-                }
-
                 // Create enriched message
                 const enrichedMessage = {
                   ...payload.new,
-                  profiles: profileData || {
-                    full_name: authUser?.email?.split('@')[0] || 'Anonymous',
+                  profiles: userProfile || { 
+                    full_name: 'Anonymous',
                     avatar_url: null
                   },
                   reactions: []
@@ -352,24 +529,29 @@ function App() {
                 setMessages(currentMessages => [...currentMessages, enrichedMessage]);
               } catch (error) {
                 console.error('Error processing new message:', error);
-                // Still add the message even if profile fetch fails
-                setMessages(currentMessages => [...currentMessages, {
-                  ...payload.new,
-                  profiles: { full_name: 'Anonymous', avatar_url: null },
-                  reactions: []
-                }]);
               }
             }
           } else if (payload.eventType === 'DELETE') {
-            setMessages(currentMessages => 
-              currentMessages.filter(message => message.id !== payload.old.id)
-            )
+            // Remove deleted messages from the current view
+            if (selectedDM) {
+              const isRelevantDM = (
+                (payload.old.user_id === user.id && payload.old.dm_user_id === selectedDM.user_id) ||
+                (payload.old.user_id === selectedDM.user_id && payload.old.dm_user_id === user.id)
+              );
+              if (!isRelevantDM) return;
+            } else {
+              if (payload.old.channel_id !== selectedChannel.id) return;
+            }
+
+              setMessages(currentMessages => 
+                currentMessages.filter(message => message.id !== payload.old.id)
+              );
           }
         }
       )
       .subscribe()
 
-    // Fetch existing messages when channel changes
+    // Fetch existing messages when channel/DM changes
     fetchMessages();
 
     // Subscribe to reactions
@@ -392,7 +574,7 @@ function App() {
       messageSubscription.unsubscribe()
       reactionSubscription.unsubscribe()
     }
-  }, [selectedChannel])
+  }, [selectedChannel, selectedDM])
 
   async function fetchChannels() {
     try {
@@ -416,13 +598,17 @@ function App() {
   }
 
   async function fetchMessages() {
-    if (!selectedChannel) return;
+    if (!selectedChannel && !selectedDM) return;
 
     try {
+      if (selectedDM) {
+        console.log('Fetching DM messages with:', selectedDM.full_name);
+      } else {
       console.log('Fetching messages for channel:', selectedChannel.id);
+      }
 
-      // Fetch messages first
-      const { data: messagesData, error: messagesError } = await supabase
+      // Build the query based on whether we're in a channel or DM
+      let query = supabase
         .from('messages')
         .select(`
           *,
@@ -432,9 +618,20 @@ function App() {
             user_id
           )
         `)
-        .eq('channel_id', selectedChannel.id)
         .is('deleted_at', null)
         .order('created_at', { ascending: true });
+
+      if (selectedDM) {
+        // For DMs, we want messages where:
+        // (user_id = current_user AND dm_user_id = selected_user) OR
+        // (user_id = selected_user AND dm_user_id = current_user)
+        query = query.or(`and(user_id.eq.${user.id},dm_user_id.eq.${selectedDM.user_id}),and(user_id.eq.${selectedDM.user_id},dm_user_id.eq.${user.id})`)
+      } else {
+        // For channels, just filter by channel_id
+        query = query.eq('channel_id', selectedChannel.id)
+      }
+
+      const { data: messagesData, error: messagesError } = await query;
 
       if (messagesError) {
         console.error('Error details:', messagesError);
@@ -458,24 +655,9 @@ function App() {
       // Create a map of user profiles for faster lookup
       const profileMap = new Map(profilesData.map(profile => [profile.user_id, profile]));
 
-      // Get auth users data for fallback
-      const { data: authUsersData, error: authUsersError } = await supabase
-        .from('auth.users')
-        .select('id, email')
-        .in('id', userIds);
-
-      if (authUsersError) {
-        console.error('Error fetching auth users:', authUsersError);
-        // Don't throw here, we can still proceed with profiles data
-      }
-
-      // Create a map of auth users for faster lookup
-      const authUserMap = new Map(authUsersData?.map(user => [user.id, user]) || []);
-
       // Combine the data
       const processedData = messagesData.map(message => {
         const userProfile = profileMap.get(message.user_id);
-        const authUser = authUserMap.get(message.user_id);
         
         const groupedReactions = (message.reactions || []).reduce((acc, reaction) => {
           acc[reaction.emoji] = (acc[reaction.emoji] || 0) + 1;
@@ -485,7 +667,7 @@ function App() {
         return {
           ...message,
           profiles: userProfile || { 
-            full_name: authUser?.email?.split('@')[0] || 'Anonymous',
+            full_name: 'Anonymous',
             avatar_url: null 
           },
           reactions: Object.entries(groupedReactions).map(([emoji, count]) => ({
@@ -613,7 +795,7 @@ function App() {
         .from('messages')
         .insert([
           {
-            content: getCombinedText(),
+            content: formatMessageContent(textSegments),
             user_id: user.id,
             channel_id: selectedChannel.id,
             parent_id: selectedMessage.id // Reference to the original message
@@ -728,23 +910,187 @@ function App() {
     const file = e.target.files[0]
     if (file) {
       setSelectedFile(file)
-      // Add the file name to the current text segment
-      setTextSegments(prev => {
-        const newSegments = [...prev]
-        const lastSegment = newSegments[newSegments.length - 1]
-        lastSegment.text += `[File: ${file.name}] `
-        return newSegments
-      })
     }
+  }
+
+  // Add function to mark channel as read
+  const markChannelAsRead = (channelId) => {
+    setUnreadChannels(prev => {
+      const newUnread = new Set(prev)
+      newUnread.delete(channelId)
+      return newUnread
+    })
   }
 
   // Update the channel selection handler
   const handleChannelSelect = (channel) => {
-    console.log('Selecting channel:', channel); // Debug log
-    setSelectedChannel(channel);
-    setMessages([]); // Clear messages when switching channels
-    // Messages will be fetched by the useEffect hook when selectedChannel changes
-  };
+    console.log('Selecting channel:', channel)
+    setSelectedChannel(channel)
+    setSelectedDM(null) // Add this line to clear selected DM
+    setMessages([]) // Clear messages when switching channels
+    // Mark the channel as read when selected
+    markChannelAsRead(channel.id)
+  }
+
+  // Add handler for DM selection
+  const handleDMSelect = (dmUser) => {
+    setSelectedDM(dmUser)
+    setSelectedChannel(null) // Clear selected channel
+    setMessages([]) // Clear messages for now
+    markDMAsRead(dmUser.user_id) // Mark DM as read when selected
+  }
+
+  // Add handler for creating a new channel
+  const handleCreateChannel = async () => {
+    try {
+      setIsCreatingChannel(true)
+      const { data, error } = await supabase
+        .from('channels')
+        .insert([
+          {
+            name: newChannelName,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          }
+        ])
+        .select('*')
+        .single()
+
+      if (error) throw error
+
+      // Add the new channel to the channels list
+      setChannels(prev => [...prev, data])
+      // Select the new channel
+      setSelectedChannel(data)
+      // Close the modal and reset the input
+      setShowCreateChannel(false)
+      setNewChannelName('')
+    } catch (error) {
+      console.error('Error creating channel:', error)
+    } finally {
+      setIsCreatingChannel(false)
+    }
+  }
+
+  // Add handler for muting channels
+  const handleMuteChannel = (channelId) => {
+    setMutedChannels(prev => {
+      const newMuted = new Set(prev)
+      if (newMuted.has(channelId)) {
+        newMuted.delete(channelId)
+      } else {
+        newMuted.add(channelId)
+      }
+      return newMuted
+    })
+    setContextMenu({ show: false, x: 0, y: 0, channelId: null })
+  }
+
+  // Add function to mark DM as read
+  const markDMAsRead = (userId) => {
+    setUnreadDMs(prev => {
+      const newUnread = new Set(prev)
+      newUnread.delete(userId)
+      return newUnread
+    })
+  }
+
+  // Add handler for removing DMs from list
+  const handleRemoveDM = (userId) => {
+    setHiddenDMs(prev => {
+      const newHidden = new Set(prev)
+      newHidden.add(userId)
+      return newHidden
+    })
+    // If the removed DM was selected, clear the selection
+    if (selectedDM?.user_id === userId) {
+      setSelectedDM(null)
+      setMessages([])
+    }
+    // Close the context menu
+    setDmContextMenu({ show: false, x: 0, y: 0, userId: null })
+  }
+
+  // Function to update status in database
+  const updateStatus = async (status) => {
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ status_text: status })
+        .eq('user_id', user.id)
+
+      if (error) throw error
+    } catch (error) {
+      console.error('Error updating status:', error)
+    }
+  }
+
+  // Add handler for file removal
+  const handleRemoveFile = () => {
+    setSelectedFile(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '' // Reset the file input
+    }
+  }
+
+  // Helper function to upload file to Supabase Storage
+  const uploadFile = async (file) => {
+    try {
+      // Create a unique file name to avoid collisions
+      const fileExt = file.name.split('.').pop()
+      const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`
+      const filePath = `${fileName}`
+
+      // Upload file to Supabase
+      const { data, error } = await supabase.storage
+        .from('message-attachments')
+        .upload(filePath, file)
+
+      if (error) throw error
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('message-attachments')
+        .getPublicUrl(filePath)
+
+      return {
+        url: publicUrl,
+        name: file.name,
+        type: file.type,
+        size: file.size
+      }
+    } catch (error) {
+      console.error('Error uploading file:', error)
+      throw error
+    }
+  }
+
+  // Function to fetch AI response from the API
+  const fetchAIResponse = async (prompt) => {
+    try {
+      const response = await fetch('http://localhost:3001/api/query', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ prompt })
+      });
+
+      if (!response.ok) {
+        throw new Error('API request failed');
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error fetching AI response:', error);
+      throw error;
+    }
+  }
+
+  const [aiMessages, setAiMessages] = useState([])
+  const aiChatInputRef = useRef(null)
+  const [isAILoading, setIsAILoading] = useState(false)
 
   return (
     <div className="flex h-screen">
@@ -769,29 +1115,106 @@ function App() {
 
         {/* Channels Section */}
         <div className={`flex-1 overflow-y-auto ${!isSidebarOpen && 'opacity-0'}`}>
-          <div className="px-3 py-4">
-            <h2 className="text-sm font-medium mb-2 text-gray-300">Channels</h2>
-            <div className="space-y-1">
-              {channels.map(channel => (
-                <button
-                  key={channel.id}
-                  onClick={() => handleChannelSelect(channel)}
-                  className={`w-full text-left px-2 py-1 rounded text-gray-300 hover:bg-purple-800 ${
-                    selectedChannel?.id === channel.id ? 'bg-purple-700' : ''
-                  }`}
-                >
-                  # {channel.name}
-                </button>
-              ))}
+          <ChannelsList
+            channels={channels}
+            selectedChannel={selectedChannel}
+            unreadChannels={unreadChannels}
+            mutedChannels={mutedChannels}
+            handleChannelSelect={handleChannelSelect}
+            handleChannelContextMenu={handleChannelContextMenu}
+            setShowCreateChannel={setShowCreateChannel}
+          />
+
+          {/* Direct Messages Section */}
+          <DirectMessagesList 
+            users={users}
+            selectedDM={selectedDM}
+            userProfile={userProfile}
+            user={user}
+            onlineUsers={onlineUsers}
+            unreadDMs={unreadDMs}
+            hiddenDMs={hiddenDMs}
+            statusText={statusText}
+            handleDMSelect={handleDMSelect}
+            handleDMContextMenu={handleDMContextMenu}
+            setShowAddDM={setShowAddDM}
+          />
+
+          <AddDMModal
+            showAddDM={showAddDM}
+            setShowAddDM={setShowAddDM}
+            users={users}
+            setHiddenDMs={setHiddenDMs}
+            handleDMSelect={handleDMSelect}
+          />
+
+          {/* Channel Context Menu */}
+          {contextMenu.show && (
+            <div
+              ref={contextMenuRef}
+              style={{
+                position: 'fixed',
+                top: contextMenu.y,
+                left: contextMenu.x,
+                zIndex: 1000
+              }}
+              className="bg-white rounded-lg shadow-lg border border-gray-200 py-1 w-48"
+            >
+              <button 
+                onClick={() => handleMuteChannel(contextMenu.channelId)}
+                className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm text-gray-900 flex items-center justify-between"
+              >
+                <span>{mutedChannels.has(contextMenu.channelId) ? 'Unmute channel' : 'Mute channel'}</span>
+                {mutedChannels.has(contextMenu.channelId) && (
+                  <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                )}
+              </button>
+              <button className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm text-red-600">
+                Leave channel
+              </button>
             </div>
+          )}
+
+          {/* DM Context Menu */}
+          {dmContextMenu.show && (
+            <div
+              ref={dmContextMenuRef}
+              style={{
+                position: 'fixed',
+                top: dmContextMenu.y,
+                left: dmContextMenu.x,
+                zIndex: 1000
+              }}
+              className="bg-white rounded-lg shadow-lg border border-gray-200 py-1 w-48"
+            >
+              <button 
+                onClick={() => handleRemoveDM(dmContextMenu.userId)}
+                className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm text-red-600"
+              >
+                Remove DM from list
+              </button>
           </div>
+          )}
         </div>
+
+        <CreateChannelModal
+          showCreateChannel={showCreateChannel}
+          setShowCreateChannel={setShowCreateChannel}
+          newChannelName={newChannelName}
+          setNewChannelName={setNewChannelName}
+          isCreatingChannel={isCreatingChannel}
+          handleCreateChannel={handleCreateChannel}
+        />
       </div>
 
       {/* Main Content + Thread Sidebar Container */}
       <div className="flex-1 flex overflow-hidden">
         {/* Main Content */}
-        <div className={`flex-1 flex flex-col bg-white min-w-0 ${showThreadSidebar ? 'max-w-[calc(100%-600px)]' : ''}`}>
+        <div className={`flex-1 flex flex-col bg-white min-w-0 ${
+          showThreadSidebar || showAIChatSidebar ? 'max-w-[calc(100%-600px)]' : ''
+        }`}>
           {/* Search Bar */}
           <div className="bg-purple-900 px-4 py-2 flex items-center justify-between">
             <div className="flex items-center space-x-2">
@@ -831,7 +1254,36 @@ function App() {
                     ≡
                   </button>
                 )}
+                {selectedDM ? (
+                  <div className="flex items-center space-x-2">
+                    {selectedDM.avatar_url ? (
+                      <img
+                        src={selectedDM.avatar_url}
+                        alt={selectedDM.full_name}
+                        className="w-6 h-6 rounded-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-6 h-6 rounded-full bg-purple-700 flex items-center justify-center text-white text-sm">
+                        {selectedDM.full_name[0].toUpperCase()}
+                      </div>
+                    )}
+                    <h2 className="text-lg font-bold">{selectedDM.full_name}</h2>
+                    <span className={`w-2 h-2 rounded-full ${
+                      onlineUsers.has(selectedDM.user_id) ? 'bg-green-500' : 'bg-gray-400'
+                    }`}></span>
+                    {!onlineUsers.has(selectedDM.user_id) && (
+                      <button 
+                        onClick={() => setShowAIChatSidebar(true)}
+                        className="ml-2 hover:bg-gray-100 rounded p-1" 
+                        title="Chat with AI Avatar"
+                      >
+                        <Icons.AI />
+                      </button>
+                    )}
+                  </div>
+                ) : (
                 <h2 className="text-lg font-bold">#{selectedChannel?.name}</h2>
+                )}
               </div>
               <div className="flex items-center space-x-2 relative">
                 <button
@@ -846,92 +1298,25 @@ function App() {
                     />
                   ) : (
                     <div className="w-8 h-8 rounded-full bg-purple-700 flex items-center justify-center text-white text-sm">
-                      {user.email?.[0].toUpperCase()}
+                      {userProfile?.full_name?.[0].toUpperCase() || user.email?.[0].toUpperCase()}
                     </div>
                   )}
                 </button>
 
-                {/* Profile Dropdown Menu */}
-                {showProfileMenu && (
-                  <div 
-                    ref={profileMenuRef}
-                    className="absolute right-0 top-full mt-2 w-72 bg-white rounded-lg shadow-lg border border-gray-200 z-50"
-                  >
-                    {/* User Info */}
-                    <div className="p-4">
-                      <div className="flex items-center space-x-3">
-                        {userProfile?.avatar_url ? (
-                          <img
-                            src={userProfile.avatar_url}
-                            alt="Profile"
-                            className="w-12 h-12 rounded-full object-cover"
-                          />
-                        ) : (
-                          <div className="w-12 h-12 rounded-full bg-purple-700 flex items-center justify-center text-white">
-                            {user.email?.[0].toUpperCase()}
-                          </div>
-                        )}
-                        <div>
-                          <div className="font-bold">{userProfile?.full_name || 'Anonymous'}</div>
-                          <div className="flex items-center text-sm">
-                            <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
-                            Active
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Status Update */}
-                    <div className="px-4 py-2">
-                      <button className="w-full text-left px-3 py-2 rounded border border-gray-300 text-gray-600 hover:border-gray-400 focus:outline-none">
-                        <div className="flex items-center space-x-2">
-                          <span className="text-xl">☺</span>
-                          <span>Update your status</span>
-                        </div>
-                      </button>
-                    </div>
-
-                    {/* Set Away */}
-                    <div className="px-4 py-2 border-t">
-                      <button className="w-full text-left px-3 py-2 hover:bg-gray-100 rounded">
-                        Set yourself as <span className="font-semibold">away</span>
-                      </button>
-                    </div>
-
-                    {/* Pause Notifications */}
-                    <div className="px-4 py-2 border-t">
-                      <button className="w-full text-left px-3 py-2 hover:bg-gray-100 rounded flex items-center justify-between">
-                        <span>Pause notifications</span>
-                        <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                        </svg>
-                      </button>
-                    </div>
-
-                    {/* Profile & Preferences */}
-                    <div className="px-4 py-2 border-t">
-                      <button 
-                        className="w-full text-left px-3 py-2 hover:bg-gray-100 rounded"
-                        onClick={handleProfileButtonClick}
-                      >
-                        Profile
-                      </button>
-                      <button className="w-full text-left px-3 py-2 hover:bg-gray-100 rounded">
-                        Preferences
-                      </button>
-                    </div>
-
-                    {/* Sign Out */}
-                    <div className="px-4 py-2 border-t">
-                      <button 
-                        onClick={signOut}
-                        className="w-full text-left px-3 py-2 hover:bg-gray-100 rounded"
-                      >
-                        Sign out of GauntletAI
-                      </button>
-                    </div>
-                  </div>
-                )}
+                {/* Profile Menu */}
+                <ProfileMenu
+                  showProfileMenu={showProfileMenu}
+                  profileMenuRef={profileMenuRef}
+                  userProfile={userProfile}
+                  user={user}
+                  statusText={statusText}
+                  isEditingStatus={isEditingStatus}
+                  setIsEditingStatus={setIsEditingStatus}
+                  setStatusText={setStatusText}
+                  updateStatus={updateStatus}
+                  signOut={signOut}
+                  handleProfileButtonClick={handleProfileButtonClick}
+                />
               </div>
             </div>
             {/* Navigation Tabs */}
@@ -953,170 +1338,21 @@ function App() {
           </div>
 
           {/* Messages Area */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {messages.map(message => (
-              <div 
-                key={message.id} 
-                className="flex items-start space-x-3 group relative hover:bg-gray-50 p-2 rounded-lg message-container"
-              >
-                <div className="w-9 h-9 rounded bg-gray-300 flex-shrink-0" /> {/* Avatar placeholder */}
-                <div className="flex-1">
-                  <div className="flex items-baseline space-x-2">
-                    <span className="font-bold">
-                      {message.profiles?.full_name || 'Anonymous'}
-                    </span>
-                    <span className="text-xs text-gray-500">
-                      {new Date(message.created_at).toLocaleTimeString()}
-                    </span>
-                  </div>
-                  <p className="text-gray-900">
-                    {(() => {
-                      const content = message.content
-                      const parts = []
-                      let currentText = content
-                      
-                      // Handle bold text
-                      while (currentText.includes('**')) {
-                        const startIdx = currentText.indexOf('**')
-                        const endIdx = currentText.indexOf('**', startIdx + 2)
-                        
-                        if (endIdx === -1) break
-                        
-                        // Add text before bold
-                        if (startIdx > 0) {
-                          parts.push(<span key={parts.length}>{currentText.slice(0, startIdx)}</span>)
-                        }
-                        
-                        // Add bold text
-                        parts.push(
-                          <span key={parts.length} className="font-bold">
-                            {currentText.slice(startIdx + 2, endIdx)}
-                          </span>
-                        )
-                        
-                        currentText = currentText.slice(endIdx + 2)
-                      }
-                      
-                      // Handle italic text in remaining content
-                      while (currentText.includes('_')) {
-                        const startIdx = currentText.indexOf('_')
-                        const endIdx = currentText.indexOf('_', startIdx + 1)
-                        
-                        if (endIdx === -1) break
-                        
-                        // Add text before italic
-                        if (startIdx > 0) {
-                          parts.push(<span key={parts.length}>{currentText.slice(0, startIdx)}</span>)
-                        }
-                        
-                        // Add italic text
-                        parts.push(
-                          <span key={parts.length} className="italic">
-                            {currentText.slice(startIdx + 1, endIdx)}
-                          </span>
-                        )
-                        
-                        currentText = currentText.slice(endIdx + 1)
-                      }
-
-                      // Handle strikethrough text in remaining content
-                      while (currentText.includes('~~')) {
-                        const startIdx = currentText.indexOf('~~')
-                        const endIdx = currentText.indexOf('~~', startIdx + 2)
-                        
-                        if (endIdx === -1) break
-                        
-                        // Add text before strikethrough
-                        if (startIdx > 0) {
-                          parts.push(<span key={parts.length}>{currentText.slice(0, startIdx)}</span>)
-                        }
-                        
-                        // Add strikethrough text
-                        parts.push(
-                          <span key={parts.length} className="line-through">
-                            {currentText.slice(startIdx + 2, endIdx)}
-                          </span>
-                        )
-                        
-                        currentText = currentText.slice(endIdx + 2)
-                      }
-                      
-                      // Add any remaining text
-                      if (currentText) {
-                        parts.push(<span key={parts.length}>{currentText}</span>)
-                      }
-                      
-                      return parts.length > 0 ? parts : content
-                    })()}
-                  </p>
-                  {/* Reactions display */}
-                  <div className="flex items-center space-x-2 mt-1">
-                    {console.log('Message reactions:', message.reactions)}
-                    {Array.isArray(message.reactions) && message.reactions.map((reaction, index) => (
-                      <button
-                        key={`${reaction.emoji}-${index}`}
-                        className="inline-flex items-center space-x-1 bg-gray-100 hover:bg-gray-200 rounded px-2 py-1 text-sm"
-                        onClick={() => handleReactionSelect(message.id, { emoji: reaction.emoji })}
-                      >
-                        <span>{reaction.emoji}</span>
-                        <span className="text-gray-600">{reaction.count}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                {/* Reaction and Thread buttons */}
-                <div className="opacity-0 group-hover:opacity-100 absolute right-2 top-2 flex items-center space-x-2">
-                  <button
-                    className="p-1 hover:bg-gray-200 rounded"
-                    onClick={(e) => {
-                      e.preventDefault()
-                      handleReactionButtonClick(message.id, e)
-                    }}
-                  >
-                    <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </button>
-                  <button
-                    className="p-1 hover:bg-gray-200 rounded"
-                    onClick={(e) => {
-                      e.preventDefault()
-                      handleThreadClick(message)
-                    }}
-                  >
-                    <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                    </svg>
-                  </button>
-                </div>
-                {/* Emoji picker for reactions */}
-                {showReactionPicker === message.id && (
-                  <div 
-                    ref={emojiPickerRef} 
-                    className={`absolute right-0 ${
-                      pickerPosition === 'top' 
-                        ? 'bottom-full mb-2' 
-                        : 'top-full mt-2'
-                    } z-50`}
-                  >
-                    <EmojiPicker
-                      onEmojiClick={(emojiObject) => handleReactionSelect(message.id, emojiObject)}
-                      searchPlaceholder="Search all emoji"
-                      width={280}
-                      height={300}
-                    />
-                  </div>
-                )}
-              </div>
-            ))}
-            {/* Add div for scrolling reference */}
-            <div ref={messagesEndRef} />
-          </div>
+          <MessageList 
+            messages={messages}
+            showReactionPicker={showReactionPicker}
+            pickerPosition={pickerPosition}
+            handleReactionButtonClick={handleReactionButtonClick}
+            handleThreadClick={handleThreadClick}
+            handleReactionSelect={handleReactionSelect}
+            emojiPickerRef={emojiPickerRef}
+            messagesEndRef={messagesEndRef}
+          />
 
           {/* Message Input */}
           <MessageInput 
             onSendMessage={handleSendMessage}
-            placeholder={`Message #${selectedChannel?.name}`}
+            placeholder={selectedDM ? `Message ${selectedDM.full_name}` : `Message #${selectedChannel?.name}`}
             isTextBold={isTextBold}
             isTextItalic={isTextItalic}
             isTextStrikethrough={isTextStrikethrough}
@@ -1129,324 +1365,118 @@ function App() {
             inputRef={inputRef}
             fileInputRef={fileInputRef}
             handleFileSelect={handleFileSelect}
-            handleBoldClick={() => setIsTextBold(!isTextBold)}
-            handleItalicClick={() => setIsTextItalic(!isTextItalic)}
-            handleStrikethroughClick={() => setIsTextStrikethrough(!isTextStrikethrough)}
+            handleBoldClick={handleBoldClick}
+            handleItalicClick={handleItalicClick}
+            handleStrikethroughClick={handleStrikethroughClick}
+            selectedFile={selectedFile}
+            onRemoveFile={handleRemoveFile}
           />
         </div>
 
         {/* Thread Sidebar */}
-        <div 
-          className={`fixed right-0 top-0 bottom-0 w-[600px] border-l border-gray-200 bg-white flex flex-col transition-all duration-300 ease-in-out ${
-            showThreadSidebar ? 'translate-x-0' : 'translate-x-full'
-          }`}
-        >
-          {/* Thread Header */}
-          <div className="p-4 border-b flex items-center justify-between">
-            <h2 className="font-bold">Thread</h2>
-            <button 
-              onClick={() => setShowThreadSidebar(false)}
-              className="p-2 hover:bg-gray-100 rounded text-gray-600"
-            >
-              ✕
-            </button>
-          </div>
+        <ThreadSidebar
+          showThreadSidebar={showThreadSidebar}
+          selectedMessage={selectedMessage}
+          threadMessages={threadMessages}
+          setShowThreadSidebar={setShowThreadSidebar}
+          handleSendThreadMessage={handleSendThreadMessage}
+          isTextBold={isTextBold}
+          isTextItalic={isTextItalic}
+          isTextStrikethrough={isTextStrikethrough}
+          handleTextInput={handleTextInput}
+          getCombinedText={getCombinedText}
+          handleUtilityClick={handleUtilityClick}
+          handleEmojiButtonClick={handleEmojiButtonClick}
+          showEmojiPicker={showEmojiPicker}
+          onEmojiClick={onEmojiClick}
+          inputRef={inputRef}
+          fileInputRef={fileInputRef}
+          handleFileSelect={handleFileSelect}
+          handleBoldClick={() => setIsTextBold(!isTextBold)}
+          handleItalicClick={() => setIsTextItalic(!isTextItalic)}
+          handleStrikethroughClick={() => setIsTextStrikethrough(!isTextStrikethrough)}
+        />
 
-          {/* Original Message */}
-          {selectedMessage && (
-            <div className="p-4 border-b">
-              <div className="flex items-start space-x-3">
-                <div className="w-9 h-9 rounded bg-gray-300 flex-shrink-0" />
-                <div>
-                  <div className="flex items-baseline space-x-2">
-                    <span className="font-bold">{selectedMessage.profiles?.full_name || 'Anonymous'}</span>
-                    <span className="text-xs text-gray-500">
-                      {new Date(selectedMessage.created_at).toLocaleTimeString()}
-                    </span>
-                  </div>
-                  <p className="text-gray-900">{selectedMessage.content}</p>
-                </div>
-              </div>
-            </div>
-          )}
+        {/* AI Chat Sidebar */}
+        <AIChatSidebar
+          showAIChatSidebar={showAIChatSidebar}
+          selectedDM={selectedDM}
+          aiMessages={aiMessages}
+          setShowAIChatSidebar={setShowAIChatSidebar}
+          isLoading={isAILoading}
+          handleSendAIMessage={async (e) => {
+            e.preventDefault();
+            const messageText = getCombinedText();
+            if (!messageText.trim()) return;
 
-          {/* Thread Messages */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {threadMessages.map(message => (
-              <div key={message.id} className="flex items-start space-x-3">
-                <div className="w-9 h-9 rounded bg-gray-300 flex-shrink-0" />
-                <div>
-                  <div className="flex items-baseline space-x-2">
-                    <span className="font-bold">{message.profiles?.full_name || 'Anonymous'}</span>
-                    <span className="text-xs text-gray-500">
-                      {new Date(message.created_at).toLocaleTimeString()}
-                    </span>
-                  </div>
-                  <p className="text-gray-900">{message.content}</p>
-                </div>
-              </div>
-            ))}
-          </div>
+            // Add user message
+            const userMessage = {
+              content: messageText,
+              timestamp: new Date().toLocaleTimeString(),
+              isAI: false
+            };
+            setAiMessages(prev => [...prev, userMessage]);
 
-          {/* Reply Input */}
-          <div className="p-4 mt-auto border-t">
-            <form onSubmit={handleSendThreadMessage}>
-              <div className="flex flex-col">
-                {/* Formatting Toolbar */}
-                <div className="flex items-center space-x-2 mb-2 border-b pb-2">
-                  <button
-                    type="button"
-                    className={`p-1 hover:bg-gray-100 rounded ${isTextBold ? 'bg-gray-200' : ''}`}
-                    title="Bold"
-                    onClick={handleBoldClick}
-                  >
-                    <span className="font-bold">B</span>
-                  </button>
-                  <button
-                    type="button"
-                    className={`p-1 hover:bg-gray-100 rounded ${isTextItalic ? 'bg-gray-200' : ''}`}
-                    title="Italic"
-                    onClick={handleItalicClick}
-                  >
-                    <span className="italic">I</span>
-                  </button>
-                  <button
-                    type="button"
-                    className={`p-1 hover:bg-gray-100 rounded ${isTextStrikethrough ? 'bg-gray-200' : ''}`}
-                    title="Strikethrough"
-                    onClick={handleStrikethroughClick}
-                  >
-                    <span className="line-through">S</span>
-                  </button>
-                  <div className="h-4 w-px bg-gray-300 mx-2"></div>
-                  <button
-                    type="button"
-                    className="p-1 hover:bg-gray-100 rounded"
-                    title="Link"
-                    onClick={handleUtilityClick}
-                  >
-                    <Icons.Link />
-                  </button>
-                  <button
-                    type="button"
-                    className="p-1 hover:bg-gray-100 rounded"
-                    title="Numbered List"
-                    onClick={handleUtilityClick}
-                  >
-                    <Icons.NumberedList />
-                  </button>
-                  <button
-                    type="button"
-                    className="p-1 hover:bg-gray-100 rounded"
-                    title="Bulleted List"
-                    onClick={handleUtilityClick}
-                  >
-                    <Icons.BulletedList />
-                  </button>
-                  <button
-                    type="button"
-                    className="p-1 hover:bg-gray-100 rounded"
-                    title="Code Block"
-                    onClick={handleUtilityClick}
-                  >
-                    <Icons.CodeBlock />
-                  </button>
-                  <button
-                    type="button"
-                    className="p-1 hover:bg-gray-100 rounded"
-                    title="Quote"
-                    onClick={handleUtilityClick}
-                  >
-                    <Icons.Quote />
-                  </button>
-                </div>
-                {/* Message Input */}
-                <div className="flex flex-col">
-                  <div className="border rounded-md flex">
-                    <input
-                      ref={inputRef}
-                      type="text"
-                      value={getCombinedText()}
-                      onChange={handleTextInput}
-                      placeholder="Reply..."
-                      className={`flex-1 px-4 py-2 focus:outline-none ${isTextBold ? 'font-bold' : ''} ${isTextItalic ? 'italic' : ''}`}
-                    />
-                    <button
-                      type="submit"
-                      className="px-4 py-2 bg-purple-600 text-white rounded-r-md hover:bg-purple-700 focus:outline-none"
-                    >
-                      Send
-                    </button>
-                  </div>
-                  {/* Utility Buttons */}
-                  <div className="flex items-center space-x-3 mt-2 text-gray-500">
-                    <input
-                      type="file"
-                      ref={fileInputRef}
-                      onChange={handleFileSelect}
-                      className="hidden"
-                    />
-                    <button
-                      type="button"
-                      className="p-1 hover:bg-gray-100 rounded"
-                      title="Add files"
-                      onClick={(e) => handleUtilityClick(e, 'file')}
-                    >
-                      <Icons.Attachment />
-                    </button>
-                    <div className="relative">
-                      <button
-                        type="button"
-                        className={`p-1 hover:bg-gray-100 rounded ${showEmojiPicker ? 'bg-gray-200' : ''}`}
-                        title="Add emoji"
-                        onClick={handleEmojiButtonClick}
-                      >
-                        <Icons.Emoji />
-                      </button>
-                      {showEmojiPicker && (
-                        <div ref={emojiPickerRef} className="absolute bottom-full mb-2">
-                          <EmojiPicker
-                            onEmojiClick={onEmojiClick}
-                            searchPlaceholder="Search all emoji"
-                            width={280}
-                            height={300}
-                          />
-                        </div>
-                      )}
-                    </div>
-                    <button
-                      type="button"
-                      className="p-1 hover:bg-gray-100 rounded"
-                      title="Mention someone"
-                      onClick={handleUtilityClick}
-                    >
-                      <Icons.Mention />
-                    </button>
-                    <button
-                      type="button"
-                      className="p-1 hover:bg-gray-100 rounded"
-                      title="Record audio"
-                      onClick={handleUtilityClick}
-                    >
-                      <Icons.Audio />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </form>
-          </div>
-        </div>
+            try {
+              setIsAILoading(true);
+              // Clear input before awaiting response
+              setTextSegments([{ text: '', isBold: false, isItalic: false, isStrikethrough: false }]);
+              
+              // Get AI response
+              const { response } = await fetchAIResponse(messageText);
+              
+              // Add AI message
+              const aiMessage = {
+                content: response,
+                timestamp: new Date().toLocaleTimeString(),
+                isAI: true
+              };
+              setAiMessages(prev => [...prev, aiMessage]);
+            } catch (error) {
+              // Add error message to chat
+              const errorMessage = {
+                content: "Sorry, I couldn't process your message. Please try again.",
+                timestamp: new Date().toLocaleTimeString(),
+                isAI: true,
+                isError: true
+              };
+              setAiMessages(prev => [...prev, errorMessage]);
+            } finally {
+              setIsAILoading(false);
+            }
+          }}
+          isTextBold={isTextBold}
+          isTextItalic={isTextItalic}
+          isTextStrikethrough={isTextStrikethrough}
+          handleTextInput={handleTextInput}
+          getCombinedText={getCombinedText}
+          handleUtilityClick={handleUtilityClick}
+          handleEmojiButtonClick={handleEmojiButtonClick}
+          showEmojiPicker={showEmojiPicker}
+          onEmojiClick={onEmojiClick}
+          inputRef={aiChatInputRef}
+          fileInputRef={fileInputRef}
+          handleFileSelect={handleFileSelect}
+          handleBoldClick={() => setIsTextBold(!isTextBold)}
+          handleItalicClick={() => setIsTextItalic(!isTextItalic)}
+          handleStrikethroughClick={() => setIsTextStrikethrough(!isTextStrikethrough)}
+        />
       </div>
 
       {/* Profile Sidebar */}
-      <div 
-        className={`fixed right-0 top-0 bottom-0 w-[600px] border-l border-gray-200 bg-white flex flex-col transition-all duration-300 ease-in-out ${
-          showProfileSidebar ? 'translate-x-0' : 'translate-x-full'
-        } z-50`}
-      >
-        {/* Profile Header */}
-        <div className="p-4 border-b flex items-center justify-between">
-          <h2 className="font-bold">Profile</h2>
-          <button 
-            onClick={() => setShowProfileSidebar(false)}
-            className="p-2 hover:bg-gray-100 rounded text-gray-600"
-          >
-            ✕
-          </button>
-        </div>
-
-        {/* Profile Content */}
-        <div className="flex-1 overflow-y-auto">
-          {/* Profile Image */}
-          <div className="p-8 flex justify-center">
-            {userProfile?.avatar_url ? (
-              <img
-                src={userProfile.avatar_url}
-                alt="Profile"
-                className="w-40 h-40 rounded-lg object-cover"
-              />
-            ) : (
-              <div className="w-40 h-40 rounded-lg bg-purple-700 flex items-center justify-center text-white text-4xl">
-                {user.email?.[0].toUpperCase()}
-              </div>
-            )}
-          </div>
-
-          {/* Profile Info */}
-          <div className="px-8">
-            {/* Name Section */}
-            <div className="mb-6">
-              <div className="flex items-center justify-between">
-                {isEditingName ? (
-                  <input
-                    ref={nameInputRef}
-                    type="text"
-                    value={editedName}
-                    onChange={(e) => setEditedName(e.target.value)}
-                    onKeyDown={handleNameKeyPress}
-                    className="text-2xl font-bold px-1 py-0.5 border rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    placeholder="Enter your name"
-                  />
-                ) : (
-                  <h1 className="text-2xl font-bold">{userProfile?.full_name || 'Anonymous'}</h1>
-                )}
-                <button 
-                  onClick={handleNameEdit}
-                  className="text-blue-600 hover:underline text-sm"
-                >
-                  {isEditingName ? 'Save' : 'Edit'}
-                </button>
-              </div>
-              <button className="mt-2 text-blue-600 hover:underline text-sm flex items-center">
-                <Icons.Plus />
-                Add name pronunciation
-              </button>
-            </div>
-
-            {/* Status Section */}
-            <div className="mb-6">
-              <div className="flex items-center text-sm mb-2">
-                <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
-                Active
-                <span className="text-gray-500 ml-2">8:50 PM local time</span>
-              </div>
-              <div className="flex space-x-2">
-                <button className="px-4 py-1 border rounded hover:bg-gray-50 text-sm">
-                  Set a status
-                </button>
-                <button className="px-4 py-1 border rounded hover:bg-gray-50 text-sm flex items-center">
-                  View as
-                  <Icons.ChevronDown />
-                </button>
-                <button className="p-1 hover:bg-gray-100 rounded">
-                  <Icons.More />
-                </button>
-              </div>
-            </div>
-
-            {/* Contact Information */}
-            <div className="mb-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="font-bold">Contact information</h2>
-                <button className="text-blue-600 hover:underline text-sm">Edit</button>
-              </div>
-              <div className="space-y-3">
-                <div className="flex items-start">
-                  <Icons.Email />
-                  <div>
-                    <div className="text-sm">Email Address</div>
-                    <div className="text-blue-600 hover:underline">{user.email}</div>
-                  </div>
-                </div>
-                <button className="text-blue-600 hover:underline text-sm flex items-center">
-                  <Icons.Plus />
-                  Add Phone
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+      <ProfileSidebar
+        showProfileSidebar={showProfileSidebar}
+        setShowProfileSidebar={setShowProfileSidebar}
+        userProfile={userProfile}
+        user={user}
+        isEditingName={isEditingName}
+        setIsEditingName={setIsEditingName}
+        editedName={editedName}
+        setEditedName={setEditedName}
+        handleNameEdit={handleNameEdit}
+        handleNameKeyPress={handleNameKeyPress}
+        nameInputRef={nameInputRef}
+      />
     </div>
   )
 }

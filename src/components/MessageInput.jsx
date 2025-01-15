@@ -2,6 +2,7 @@ import React, { useRef } from 'react'
 import { Icons } from './icons'
 import FormattingToolbar from './FormattingToolbar'
 import EmojiPicker from 'emoji-picker-react'
+import FilePreview from './FilePreview'
 
 export default function MessageInput({ 
   onSendMessage, 
@@ -20,7 +21,9 @@ export default function MessageInput({
   handleFileSelect,
   handleBoldClick,
   handleItalicClick,
-  handleStrikethroughClick
+  handleStrikethroughClick,
+  selectedFile,
+  onRemoveFile
 }) {
   const emojiPickerRef = useRef(null)
 
@@ -103,23 +106,30 @@ export default function MessageInput({
         </div>
       </div>
 
-      <div className="border rounded-md flex mt-2">
-        <input
-          ref={inputRef}
-          type="text"
-          value={getCombinedText()}
-          onChange={handleTextInput}
-          onKeyDown={handleKeyDown}
-          placeholder={placeholder}
-          className={`flex-1 px-4 py-2 focus:outline-none ${isTextBold ? 'font-bold' : ''} ${isTextItalic ? 'italic' : ''} ${isTextStrikethrough ? 'line-through' : ''}`}
-        />
-        <button
-          type="submit"
-          className="px-4 py-2 bg-purple-600 text-white rounded-r-md hover:bg-purple-700 focus:outline-none"
-          onClick={onSendMessage}
-        >
-          Send
-        </button>
+      <div className="border rounded-md flex flex-col mt-2">
+        {selectedFile && (
+          <div className="px-4 pt-3">
+            <FilePreview file={selectedFile} onRemove={onRemoveFile} />
+          </div>
+        )}
+        <div className="flex">
+          <input
+            ref={inputRef}
+            type="text"
+            value={getCombinedText()}
+            onChange={handleTextInput}
+            onKeyDown={handleKeyDown}
+            placeholder={placeholder}
+            className={`flex-1 px-4 py-2 focus:outline-none ${isTextBold ? 'font-bold' : ''} ${isTextItalic ? 'italic' : ''} ${isTextStrikethrough ? 'line-through' : ''}`}
+          />
+          <button
+            type="submit"
+            className="px-4 py-2 bg-purple-600 text-white rounded-r-md hover:bg-purple-700 focus:outline-none"
+            onClick={onSendMessage}
+          >
+            Send
+          </button>
+        </div>
       </div>
 
       <div className="flex items-center space-x-2 mt-2 text-gray-500">
