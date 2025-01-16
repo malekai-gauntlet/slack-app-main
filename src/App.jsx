@@ -1127,7 +1127,31 @@ function App() {
       
       // Add AI message
       const aiMessage = {
-        content: response,
+        content: response.blocks ? (
+          <div>
+            {response.blocks.map((block, index) => {
+              if (block.type === 'section') {
+                return <div key={index}>{block.text.text}</div>
+              }
+              if (block.type === 'file') {
+                return (
+                  <div key={index} className="mt-2">
+                    <a 
+                      href={block.external_id}
+                      download={block.title}
+                      className="text-blue-600 hover:underline flex items-center cursor-pointer"
+                    >
+                      <Icons.File className="w-4 h-4 mr-1" />
+                      {block.title}
+                      <Icons.Download className="w-3 h-3 ml-2 text-gray-500" />
+                    </a>
+                  </div>
+                )
+              }
+              return null
+            })}
+          </div>
+        ) : response,
         timestamp: new Date().toLocaleTimeString(),
         isAI: true
       };
@@ -1156,15 +1180,15 @@ function App() {
     <div className="flex h-screen">
       {/* Left Sidebar */}
       <div 
-        className={`bg-purple-900 text-white flex flex-col transition-all duration-300 ease-in-out ${
+        className={`bg-sidebar-gradient text-white flex flex-col transition-all duration-300 ease-in-out ${
           isSidebarOpen ? 'w-60' : 'w-0'
         }`}
       >
         {/* Workspace Header */}
-        <div className={`p-3 flex items-center justify-between border-b border-purple-800 ${
+        <div className={`p-3 flex items-center justify-between border-b border-gray-700 ${
           !isSidebarOpen && 'opacity-0'
         }`}>
-          <h1 className="font-bold text-lg">GauntletAI</h1>
+          <h1 className="font-bold text-lg">ChatAI</h1>
           <button 
             onClick={() => setIsSidebarOpen(false)}
             className="text-gray-400 hover:text-white text-2xl"
@@ -1198,9 +1222,11 @@ function App() {
                   setSelectedDM(null);
                   setMessages([]);
                 }}
-                className={`w-full text-left px-2 py-1 rounded hover:bg-purple-800 text-gray-300 hover:text-white flex items-center space-x-2 ${
-                  selectedChannelAI ? 'bg-purple-800 text-white' : ''
-                }`}
+                className={`w-full text-left px-2 py-1 rounded text-gray-300 ${
+                  selectedChannelAI 
+                    ? 'bg-sidebar-active text-white' 
+                    : 'hover:bg-sidebar-hover hover:text-white'
+                } flex items-center space-x-2`}
               >
                 <Icons.AI className="w-4 h-4" />
                 <span>ChannelAI</span>
@@ -1241,7 +1267,7 @@ function App() {
                 left: contextMenu.x,
                 zIndex: 1000
               }}
-              className="bg-white rounded-lg shadow-lg border border-gray-200 py-1 w-48"
+              className="bg-white rounded-lg shadow-dropdown border border-gray-200 py-1 w-48"
             >
               <button 
                 onClick={() => handleMuteChannel(contextMenu.channelId)}
@@ -1273,7 +1299,7 @@ function App() {
                 left: dmContextMenu.x,
                 zIndex: 1000
               }}
-              className="bg-white rounded-lg shadow-lg border border-gray-200 py-1 w-48"
+              className="bg-white rounded-lg shadow-dropdown border border-gray-200 py-1 w-48"
             >
               <button 
                 onClick={() => handleRemoveDM(dmContextMenu.userId)}
@@ -1298,11 +1324,11 @@ function App() {
       {/* Main Content + Thread Sidebar Container */}
       <div className="flex-1 flex overflow-hidden">
         {/* Main Content */}
-        <div className={`flex-1 flex flex-col bg-white min-w-0 ${
+        <div className={`flex-1 flex flex-col bg-white min-w-0 shadow-soft ${
           showThreadSidebar || showAIChatSidebar ? 'max-w-[calc(100%-600px)]' : ''
         }`}>
           {/* Search Bar */}
-          <div className="bg-purple-900 px-4 py-2 flex items-center justify-between">
+          <div className="bg-topbar-gradient px-4 py-2 flex items-center justify-between">
             <div className="flex items-center space-x-2">
               {!isSidebarOpen && (
                 <button 
@@ -1317,8 +1343,8 @@ function App() {
               <div className="relative">
                 <input
                   type="text"
-                  placeholder="Search GauntletAI"
-                  className="w-full bg-purple-800/50 text-white placeholder-gray-300 rounded-md py-1.5 px-4 pl-10 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  placeholder="Search Workspace"
+                  className="w-full bg-sidebar-light text-white placeholder-gray-300 rounded-md py-1.5 px-4 pl-10 focus:outline-none focus:ring-2 focus:ring-gray-400"
                 />
                 <div className="absolute left-3 top-2">
                   <Icons.Search />
@@ -1376,7 +1402,7 @@ function App() {
                     <p className="text-sm text-gray-500 mt-1 max-w-xl">
                       I'm an AI trained on all messages & files in the public channels. Ask me questions like: 
                       <br />
-                      <span className="text-gray-400">
+                      <span className="text-sm text-gray-500 mt-1 max-w-xl">
                         • <em>"Gather all resources shared the past week"</em> <br/>• <em>"Aggregate all Gauntlet accounts and API keys"</em>
                       </span>
                     </p>
@@ -1442,15 +1468,8 @@ function App() {
             {selectedChannelAI ? (
               <div className="p-4 space-y-4">
                 {channelAIMessages.map((message, index) => (
-                  <div key={index} className="flex items-start space-x-3">
-                    {message.isAI ? (
-                      <div className="w-8 h-8 rounded-full bg-purple-700 flex items-center justify-center text-white">
-                        <Icons.AI className="w-5 h-5" />
-                      </div>
-                    ) : (
-                      <div className="w-8 h-8 rounded-full bg-gray-300" />
-                    )}
-                    <div className="flex-1">
+                  <div key={index} className="flex items-start space-x-3 hover:bg-gray-50 rounded-lg p-2 transition-colors duration-150">
+                    <div className="flex-1 shadow-message rounded-lg p-3 bg-white">
                       <div className="flex items-baseline space-x-2">
                         <span className="font-medium">
                           {message.isAI ? 'ChannelAI' : 'You'}
@@ -1584,7 +1603,31 @@ function App() {
               
               // Add AI message
               const aiMessage = {
-                content: response,
+                content: response.blocks ? (
+                  <div>
+                    {response.blocks.map((block, index) => {
+                      if (block.type === 'section') {
+                        return <div key={index}>{block.text.text}</div>
+                      }
+                      if (block.type === 'file') {
+                        return (
+                          <div key={index} className="mt-2">
+                            <a 
+                              href={block.external_id}
+                              download={block.title}
+                              className="text-blue-600 hover:underline flex items-center cursor-pointer"
+                            >
+                              <Icons.File className="w-4 h-4 mr-1" />
+                              {block.title}
+                              <Icons.Download className="w-3 h-3 ml-2 text-gray-500" />
+                            </a>
+                          </div>
+                        )
+                      }
+                      return null
+                    })}
+                  </div>
+                ) : response,
                 timestamp: new Date().toLocaleTimeString(),
                 isAI: true
               };

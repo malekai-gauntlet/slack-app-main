@@ -124,10 +124,10 @@ export default function MessageInput({
           />
           <button
             type="submit"
-            className="px-4 py-2 bg-purple-600 text-white rounded-r-md hover:bg-purple-700 focus:outline-none"
+            className="px-4 py-2 text-gray-400 hover:text-purple-600 focus:outline-none transition-colors duration-150"
             onClick={onSendMessage}
           >
-            Send
+            <Icons.Send />
           </button>
         </div>
       </div>

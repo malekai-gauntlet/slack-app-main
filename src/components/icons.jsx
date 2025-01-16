@@ -146,6 +146,11 @@ export const Icons = {
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 2a2 2 0 00-2 2v2a2 2 0 002 2h0a2 2 0 002-2V4a2 2 0 00-2-2zm-4.5 10a1.5 1.5 0 100-3 1.5 1.5 0 000 3zm9 0a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM7 18v-1a5 5 0 0110 0v1a2 2 0 01-2 2H9a2 2 0 01-2-2z" />
     </svg>
   ),
+  Send: () => (
+    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12l-.5-3.5L18 12l-13.5 3.5L5 12zm0 0l5-3" />
+    </svg>
+  ),
 }
 
 export default Icons

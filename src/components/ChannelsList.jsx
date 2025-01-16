@@ -27,8 +27,10 @@ const ChannelsList = ({
             key={channel.id}
             onClick={() => handleChannelSelect(channel)}
             onContextMenu={(e) => handleChannelContextMenu(e, channel.id)}
-            className={`w-full text-left px-2 py-1 rounded text-gray-300 hover:bg-purple-800 ${
-              selectedChannel?.id === channel.id ? 'bg-purple-700' : ''
+            className={`w-full text-left px-2 py-1 rounded text-gray-300 ${
+              selectedChannel?.id === channel.id 
+                ? 'bg-purple-800 text-white' 
+                : 'hover:bg-purple-800 hover:text-white'
             } flex items-center justify-between ${
               unreadChannels.has(channel.id) ? 'font-bold' : ''
             }`}
