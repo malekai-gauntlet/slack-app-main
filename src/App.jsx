@@ -87,6 +87,7 @@ function App() {
   const [unreadChannels, setUnreadChannels] = useState(new Set())
   // Add state for unread DMs
   const [unreadDMs, setUnreadDMs] = useState(new Set())
+  const [selectedChannelAI, setSelectedChannelAI] = useState(false)
 
   // Add ref for context menu
   const contextMenuRef = useRef(null)
@@ -322,8 +323,7 @@ function App() {
   }
 
   // Function to handle emoji button click
-  const handleEmojiButtonClick = (e) => {
-    e.preventDefault()
+  const handleEmojiButtonClick = () => {
     setShowEmojiPicker(!showEmojiPicker)
   }
 
@@ -702,17 +702,13 @@ function App() {
 
   // Function to handle reaction button click with position calculation
   const handleReactionButtonClick = (messageId, event) => {
-    const messageElement = event.currentTarget.closest('.message-container')
-    const rect = messageElement.getBoundingClientRect()
-    const distanceToTop = rect.top
-    const MINIMUM_TOP_SPACE = 350 // Emoji picker height (300) + 50px padding
-    
-    setPickerPosition(distanceToTop < MINIMUM_TOP_SPACE ? 'bottom' : 'top')
-    setShowReactionPicker(messageId)
+    event.preventDefault();
+    setShowReactionPicker(messageId);
+    setPickerPosition(event.clientY > window.innerHeight / 2 ? 'top' : 'bottom');
   }
 
   // Function to handle reaction select
-  const handleReactionSelect = async (messageId, emojiObject) => {
+  const handleReactionSelect = async (messageId, emoji) => {
     try {
       // Check if reaction already exists
       const { data: existingReaction, error: fetchError } = await supabase
@@ -720,7 +716,7 @@ function App() {
         .select('id')
         .eq('message_id', messageId)
         .eq('user_id', user.id)
-        .eq('emoji', emojiObject.emoji)
+        .eq('emoji', emoji.emoji)
         .single()
 
       if (existingReaction) {
@@ -739,7 +735,7 @@ function App() {
             {
               message_id: messageId,
               user_id: user.id,
-              emoji: emojiObject.emoji
+              emoji: emoji.emoji
             }
           ])
 
@@ -747,7 +743,11 @@ function App() {
       }
 
       // Refresh messages to get updated reactions
-      await fetchMessages()
+      if (selectedChannel) {
+        fetchMessages()
+      } else if (selectedDM) {
+        fetchDirectMessages()
+      }
     } catch (error) {
       console.error('Error handling reaction:', error)
     }
@@ -781,8 +781,8 @@ function App() {
 
   // Add handler for thread button click
   const handleThreadClick = (message) => {
-    setSelectedMessage(message)
-    setShowThreadSidebar(true)
+    setSelectedMessage(message);
+    setShowThreadSidebar(true);
   }
 
   // Add handler for sending thread messages
@@ -923,21 +923,22 @@ function App() {
   }
 
   // Update the channel selection handler
-  const handleChannelSelect = (channel) => {
-    console.log('Selecting channel:', channel)
+  const handleChannelSelect = async (channel) => {
     setSelectedChannel(channel)
-    setSelectedDM(null) // Add this line to clear selected DM
+    setSelectedDM(null)
+    setSelectedChannelAI(false)
     setMessages([]) // Clear messages when switching channels
     // Mark the channel as read when selected
     markChannelAsRead(channel.id)
   }
 
   // Add handler for DM selection
-  const handleDMSelect = (dmUser) => {
-    setSelectedDM(dmUser)
-    setSelectedChannel(null) // Clear selected channel
+  const handleDMSelect = async (user) => {
+    setSelectedDM(user)
+    setSelectedChannel(null)
+    setSelectedChannelAI(false)
     setMessages([]) // Clear messages for now
-    markDMAsRead(dmUser.user_id) // Mark DM as read when selected
+    markDMAsRead(user.user_id) // Mark DM as read when selected
   }
 
   // Add handler for creating a new channel
@@ -984,6 +985,16 @@ function App() {
       return newMuted
     })
     setContextMenu({ show: false, x: 0, y: 0, channelId: null })
+  }
+
+  // Add handler for leaving a channel
+  const handleLeaveChannel = (channelId) => {
+    setChannels(prev => prev.filter(channel => channel.id !== channelId));
+    if (selectedChannel?.id === channelId) {
+      setSelectedChannel(null);
+      setMessages([]);
+    }
+    setContextMenu({ show: false, x: 0, y: 0, channelId: null });
   }
 
   // Add function to mark DM as read
@@ -1068,7 +1079,7 @@ function App() {
   // Function to fetch AI response from the API
   const fetchAIResponse = async (prompt) => {
     try {
-      const response = await fetch('http://localhost:3001/api/query', {
+      const response = await fetch('http://localhost:3001/api/query-messages', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -1091,6 +1102,55 @@ function App() {
   const [aiMessages, setAiMessages] = useState([])
   const aiChatInputRef = useRef(null)
   const [isAILoading, setIsAILoading] = useState(false)
+  const [channelAIMessages, setChannelAIMessages] = useState([])
+  const [isChannelAILoading, setIsChannelAILoading] = useState(false)
+
+  // Handler for sending messages in ChannelAI
+  const handleChannelAIMessage = async (messageText) => {
+    if (!messageText.trim()) return;
+
+    // Add user message
+    const userMessage = {
+      content: messageText,
+      timestamp: new Date().toLocaleTimeString(),
+      isAI: false
+    };
+    setChannelAIMessages(prev => [...prev, userMessage]);
+
+    try {
+      setIsChannelAILoading(true);
+      // Clear input
+      setTextSegments([{ text: '', isBold: false, isItalic: false, isStrikethrough: false }]);
+      
+      // Get AI response
+      const { response } = await fetchAIResponse(messageText);
+      
+      // Add AI message
+      const aiMessage = {
+        content: response,
+        timestamp: new Date().toLocaleTimeString(),
+        isAI: true
+      };
+      setChannelAIMessages(prev => [...prev, aiMessage]);
+    } catch (error) {
+      // Add error message to chat
+      const errorMessage = {
+        content: "Sorry, I couldn't process your message. Please try again.",
+        timestamp: new Date().toLocaleTimeString(),
+        isAI: true,
+        isError: true
+      };
+      setChannelAIMessages(prev => [...prev, errorMessage]);
+    } finally {
+      setIsChannelAILoading(false);
+    }
+  };
+
+  const handleEmojiSelect = (emoji) => {
+    // Add the emoji reaction to the message
+    console.log('Selected emoji:', emoji);
+    setShowReactionPicker(null);
+  }
 
   return (
     <div className="flex h-screen">
@@ -1124,6 +1184,29 @@ function App() {
             handleChannelContextMenu={handleChannelContextMenu}
             setShowCreateChannel={setShowCreateChannel}
           />
+
+          {/* AI Section */}
+          <div className="mt-6 px-4">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-sm font-semibold text-gray-300">AI</h2>
+            </div>
+            <div>
+              <button
+                onClick={() => {
+                  setSelectedChannelAI(true);
+                  setSelectedChannel(null);
+                  setSelectedDM(null);
+                  setMessages([]);
+                }}
+                className={`w-full text-left px-2 py-1 rounded hover:bg-purple-800 text-gray-300 hover:text-white flex items-center space-x-2 ${
+                  selectedChannelAI ? 'bg-purple-800 text-white' : ''
+                }`}
+              >
+                <Icons.AI className="w-4 h-4" />
+                <span>ChannelAI</span>
+              </button>
+            </div>
+          </div>
 
           {/* Direct Messages Section */}
           <DirectMessagesList 
@@ -1171,7 +1254,10 @@ function App() {
                   </svg>
                 )}
               </button>
-              <button className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm text-red-600">
+              <button 
+                onClick={() => handleLeaveChannel(contextMenu.channelId)}
+                className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm text-red-600"
+              >
                 Leave channel
               </button>
             </div>
@@ -1281,8 +1367,22 @@ function App() {
                       </button>
                     )}
                   </div>
+                ) : selectedChannelAI ? (
+                  <div className="flex flex-col">
+                    <div className="flex items-center space-x-2">
+                      <Icons.AI className="w-6 h-6" />
+                      <h2 className="text-lg font-bold">ChannelAI</h2>
+                    </div>
+                    <p className="text-sm text-gray-500 mt-1 max-w-xl">
+                      I'm an AI trained on all messages & files in the public channels. Ask me questions like: 
+                      <br />
+                      <span className="text-gray-400">
+                        • <em>"Gather all resources shared the past week"</em> <br/>• <em>"Aggregate all Gauntlet accounts and API keys"</em>
+                      </span>
+                    </p>
+                  </div>
                 ) : (
-                <h2 className="text-lg font-bold">#{selectedChannel?.name}</h2>
+                  <h2 className="text-lg font-bold">#{selectedChannel?.name}</h2>
                 )}
               </div>
               <div className="flex items-center space-x-2 relative">
@@ -1338,39 +1438,96 @@ function App() {
           </div>
 
           {/* Messages Area */}
-          <MessageList 
-            messages={messages}
-            showReactionPicker={showReactionPicker}
-            pickerPosition={pickerPosition}
-            handleReactionButtonClick={handleReactionButtonClick}
-            handleThreadClick={handleThreadClick}
-            handleReactionSelect={handleReactionSelect}
-            emojiPickerRef={emojiPickerRef}
-            messagesEndRef={messagesEndRef}
-          />
+          <div className="flex-1 overflow-y-auto">
+            {selectedChannelAI ? (
+              <div className="p-4 space-y-4">
+                {channelAIMessages.map((message, index) => (
+                  <div key={index} className="flex items-start space-x-3">
+                    {message.isAI ? (
+                      <div className="w-8 h-8 rounded-full bg-purple-700 flex items-center justify-center text-white">
+                        <Icons.AI className="w-5 h-5" />
+                      </div>
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-gray-300" />
+                    )}
+                    <div className="flex-1">
+                      <div className="flex items-baseline space-x-2">
+                        <span className="font-medium">
+                          {message.isAI ? 'ChannelAI' : 'You'}
+                        </span>
+                        <span className="text-xs text-gray-500">
+                          {message.timestamp}
+                        </span>
+                      </div>
+                      <div className="mt-1 text-gray-900">{message.content}</div>
+                    </div>
+                  </div>
+                ))}
+                {isChannelAILoading && (
+                  <div className="flex items-start space-x-3">
+                    <div className="w-8 h-8 rounded-full bg-purple-700 flex items-center justify-center text-white">
+                      <Icons.AI className="w-5 h-5" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-baseline space-x-2">
+                        <span className="font-medium">ChannelAI</span>
+                      </div>
+                      <div className="mt-1 text-gray-500">Thinking...</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <MessageList
+                messages={messages}
+                selectedMessage={selectedMessage}
+                setSelectedMessage={setSelectedMessage}
+                setShowThreadSidebar={setShowThreadSidebar}
+                showReactionPicker={showReactionPicker}
+                setShowReactionPicker={setShowReactionPicker}
+                handleEmojiSelect={handleEmojiSelect}
+                messagesEndRef={messagesEndRef}
+                handleReactionButtonClick={handleReactionButtonClick}
+                handleThreadClick={handleThreadClick}
+                pickerPosition={pickerPosition}
+                handleReactionSelect={handleReactionSelect}
+                emojiPickerRef={emojiPickerRef}
+              />
+            )}
+          </div>
 
           {/* Message Input */}
-          <MessageInput 
-            onSendMessage={handleSendMessage}
-            placeholder={selectedDM ? `Message ${selectedDM.full_name}` : `Message #${selectedChannel?.name}`}
-            isTextBold={isTextBold}
-            isTextItalic={isTextItalic}
-            isTextStrikethrough={isTextStrikethrough}
-            handleTextInput={handleTextInput}
-            getCombinedText={getCombinedText}
-            handleUtilityClick={handleUtilityClick}
-            handleEmojiButtonClick={handleEmojiButtonClick}
-            showEmojiPicker={showEmojiPicker}
-            onEmojiClick={onEmojiClick}
-            inputRef={inputRef}
-            fileInputRef={fileInputRef}
-            handleFileSelect={handleFileSelect}
-            handleBoldClick={handleBoldClick}
-            handleItalicClick={handleItalicClick}
-            handleStrikethroughClick={handleStrikethroughClick}
-            selectedFile={selectedFile}
-            onRemoveFile={handleRemoveFile}
-          />
+          <div className="p-4 border-t">
+            <MessageInput
+              inputRef={inputRef}
+              fileInputRef={fileInputRef}
+              selectedFile={selectedFile}
+              handleRemoveFile={handleRemoveFile}
+              handleFileSelect={handleFileSelect}
+              isTextBold={isTextBold}
+              isTextItalic={isTextItalic}
+              isTextStrikethrough={isTextStrikethrough}
+              handleBoldClick={() => setIsTextBold(!isTextBold)}
+              handleItalicClick={() => setIsTextItalic(!isTextItalic)}
+              handleStrikethroughClick={() => setIsTextStrikethrough(!isTextStrikethrough)}
+              handleTextInput={handleTextInput}
+              getCombinedText={getCombinedText}
+              handleUtilityClick={handleUtilityClick}
+              handleEmojiButtonClick={handleEmojiButtonClick}
+              showEmojiPicker={showEmojiPicker}
+              onEmojiClick={onEmojiClick}
+              onSendMessage={(e) => {
+                e.preventDefault();
+                const messageText = getCombinedText();
+                if (selectedChannelAI) {
+                  handleChannelAIMessage(messageText);
+                } else {
+                  handleSendMessage(e);
+                }
+              }}
+              placeholder={selectedChannelAI ? "Message ChannelAI..." : selectedDM ? `Message ${selectedDM.full_name}` : `Message #${selectedChannel?.name}`}
+            />
+          </div>
         </div>
 
         {/* Thread Sidebar */}
