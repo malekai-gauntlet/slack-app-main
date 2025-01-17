@@ -141,14 +141,19 @@ export const Icons = {
       <line x1="12" y1="15" x2="12" y2="3" />
     </svg>
   ),
+  Twitter: () => (
+    <svg viewBox="0 0 24 24" fill="currentColor">
+      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+    </svg>
+  ),
   AI: () => (
     <svg className="w-5 h-5 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 2a2 2 0 00-2 2v2a2 2 0 002 2h0a2 2 0 002-2V4a2 2 0 00-2-2zm-4.5 10a1.5 1.5 0 100-3 1.5 1.5 0 000 3zm9 0a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM7 18v-1a5 5 0 0110 0v1a2 2 0 01-2 2H9a2 2 0 01-2-2z" />
     </svg>
   ),
   Send: () => (
-    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12l-.5-3.5L18 12l-13.5 3.5L5 12zm0 0l5-3" />
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 19l9-7-9-7-9 7 9 7zm0 0v-14" />
     </svg>
   ),
 }

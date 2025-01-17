@@ -2,6 +2,7 @@ import React from 'react'
 import { Icons } from './icons'
 import EmojiPicker from 'emoji-picker-react'
 import FileAttachment from './FileAttachment'
+import TwitterPreview from './TwitterPreview'
 
 const MessageList = ({
   messages,
@@ -42,82 +43,161 @@ const MessageList = ({
             </div>
             <p className="text-gray-900">
               {(() => {
-                const content = message.content
-                const parts = []
-                let currentText = content
+                const content = message.content;
+                const parts = [];
+                let currentText = content;
                 
-                // Handle bold text
-                while (currentText.includes('**')) {
-                  const startIdx = currentText.indexOf('**')
-                  const endIdx = currentText.indexOf('**', startIdx + 2)
-                  
-                  if (endIdx === -1) break
-                  
-                  // Add text before bold
-                  if (startIdx > 0) {
-                    parts.push(<span key={parts.length}>{currentText.slice(0, startIdx)}</span>)
+                // Find Twitter URLs first
+                const urlRegex = /(https?:\/\/[^\s]+)/g;
+                const urls = content.match(urlRegex) || [];
+                const twitterUrls = urls.filter(url => url.includes('twitter.com') || url.includes('x.com'));
+                
+                if (twitterUrls.length > 0) {
+                  // Split content by URLs and process each part
+                  const segments = content.split(urlRegex);
+                  segments.forEach((segment, index) => {
+                    if (urls.includes(segment)) {
+                      // This is a URL segment
+                      parts.push(
+                        <a 
+                          key={index} 
+                          href={segment} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:underline"
+                        >
+                          {segment}
+                        </a>
+                      );
+                      
+                      // Add Twitter preview if it's a Twitter URL
+                      if (segment.includes('twitter.com') || segment.includes('x.com')) {
+                        parts.push(
+                          <TwitterPreview
+                            key={`preview-${index}`}
+                            url={segment}
+                          />
+                        );
+                      }
+                    } else if (segment) {
+                      // Process text formatting for non-URL segments
+                      let text = segment;
+                      let formattedParts = [];
+                      
+                      // Process bold
+                      while (text.includes('**')) {
+                        const startIdx = text.indexOf('**');
+                        const endIdx = text.indexOf('**', startIdx + 2);
+                        if (endIdx === -1) break;
+                        
+                        if (startIdx > 0) {
+                          formattedParts.push(<span key={formattedParts.length}>{text.slice(0, startIdx)}</span>);
+                        }
+                        
+                        formattedParts.push(
+                          <span key={formattedParts.length} className="font-bold">
+                            {text.slice(startIdx + 2, endIdx)}
+                          </span>
+                        );
+                        
+                        text = text.slice(endIdx + 2);
+                      }
+                      
+                      // Process italic
+                      while (text.includes('_')) {
+                        const startIdx = text.indexOf('_');
+                        const endIdx = text.indexOf('_', startIdx + 1);
+                        if (endIdx === -1) break;
+                        
+                        if (startIdx > 0) {
+                          formattedParts.push(<span key={formattedParts.length}>{text.slice(0, startIdx)}</span>);
+                        }
+                        
+                        formattedParts.push(
+                          <span key={formattedParts.length} className="italic">
+                            {text.slice(startIdx + 1, endIdx)}
+                          </span>
+                        );
+                        
+                        text = text.slice(endIdx + 1);
+                      }
+                      
+                      // Process strikethrough
+                      while (text.includes('~~')) {
+                        const startIdx = text.indexOf('~~');
+                        const endIdx = text.indexOf('~~', startIdx + 2);
+                        if (endIdx === -1) break;
+                        
+                        if (startIdx > 0) {
+                          formattedParts.push(<span key={formattedParts.length}>{text.slice(0, startIdx)}</span>);
+                        }
+                        
+                        formattedParts.push(
+                          <span key={formattedParts.length} className="line-through">
+                            {text.slice(startIdx + 2, endIdx)}
+                          </span>
+                        );
+                        
+                        text = text.slice(endIdx + 2);
+                      }
+                      
+                      if (text) {
+                        formattedParts.push(<span key={formattedParts.length}>{text}</span>);
+                      }
+                      
+                      parts.push(...(formattedParts.length > 0 ? formattedParts : [<span key={index}>{segment}</span>]));
+                    }
+                  });
+                } else {
+                  // Original formatting logic for non-Twitter messages
+                  while (currentText.includes('**')) {
+                    const startIdx = currentText.indexOf('**');
+                    const endIdx = currentText.indexOf('**', startIdx + 2);
+                    if (endIdx === -1) break;
+                    if (startIdx > 0) {
+                      parts.push(<span key={parts.length}>{currentText.slice(0, startIdx)}</span>);
+                    }
+                    parts.push(
+                      <span key={parts.length} className="font-bold">
+                        {currentText.slice(startIdx + 2, endIdx)}
+                      </span>
+                    );
+                    currentText = currentText.slice(endIdx + 2);
                   }
-                  
-                  // Add bold text
-                  parts.push(
-                    <span key={parts.length} className="font-bold">
-                      {currentText.slice(startIdx + 2, endIdx)}
-                    </span>
-                  )
-                  
-                  currentText = currentText.slice(endIdx + 2)
-                }
-                
-                // Handle italic text in remaining content
-                while (currentText.includes('_')) {
-                  const startIdx = currentText.indexOf('_')
-                  const endIdx = currentText.indexOf('_', startIdx + 1)
-                  
-                  if (endIdx === -1) break
-                  
-                  // Add text before italic
-                  if (startIdx > 0) {
-                    parts.push(<span key={parts.length}>{currentText.slice(0, startIdx)}</span>)
+                  while (currentText.includes('_')) {
+                    const startIdx = currentText.indexOf('_');
+                    const endIdx = currentText.indexOf('_', startIdx + 1);
+                    if (endIdx === -1) break;
+                    if (startIdx > 0) {
+                      parts.push(<span key={parts.length}>{currentText.slice(0, startIdx)}</span>);
+                    }
+                    parts.push(
+                      <span key={parts.length} className="italic">
+                        {currentText.slice(startIdx + 1, endIdx)}
+                      </span>
+                    );
+                    currentText = currentText.slice(endIdx + 1);
                   }
-                  
-                  // Add italic text
-                  parts.push(
-                    <span key={parts.length} className="italic">
-                      {currentText.slice(startIdx + 1, endIdx)}
-                    </span>
-                  )
-                  
-                  currentText = currentText.slice(endIdx + 1)
-                }
-
-                // Handle strikethrough text in remaining content
-                while (currentText.includes('~~')) {
-                  const startIdx = currentText.indexOf('~~')
-                  const endIdx = currentText.indexOf('~~', startIdx + 2)
-                  
-                  if (endIdx === -1) break
-                  
-                  // Add text before strikethrough
-                  if (startIdx > 0) {
-                    parts.push(<span key={parts.length}>{currentText.slice(0, startIdx)}</span>)
+                  while (currentText.includes('~~')) {
+                    const startIdx = currentText.indexOf('~~');
+                    const endIdx = currentText.indexOf('~~', startIdx + 2);
+                    if (endIdx === -1) break;
+                    if (startIdx > 0) {
+                      parts.push(<span key={parts.length}>{currentText.slice(0, startIdx)}</span>);
+                    }
+                    parts.push(
+                      <span key={parts.length} className="line-through">
+                        {currentText.slice(startIdx + 2, endIdx)}
+                      </span>
+                    );
+                    currentText = currentText.slice(endIdx + 2);
                   }
-                  
-                  // Add strikethrough text
-                  parts.push(
-                    <span key={parts.length} className="line-through">
-                      {currentText.slice(startIdx + 2, endIdx)}
-                    </span>
-                  )
-                  
-                  currentText = currentText.slice(endIdx + 2)
+                  if (currentText) {
+                    parts.push(<span key={parts.length}>{currentText}</span>);
+                  }
                 }
                 
-                // Add any remaining text
-                if (currentText) {
-                  parts.push(<span key={parts.length}>{currentText}</span>)
-                }
-                
-                return parts.length > 0 ? parts : content
+                return parts.length > 0 ? parts : content;
               })()}
             </p>
 
@@ -156,9 +236,7 @@ const MessageList = ({
                 handleReactionButtonClick(message.id, e)
               }}
             >
-              <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
+              <Icons.Emoji />
             </button>
             <button
               className="p-1 hover:bg-gray-200 rounded"
@@ -167,9 +245,7 @@ const MessageList = ({
                 handleThreadClick(message)
               }}
             >
-              <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-              </svg>
+              <Icons.More />
             </button>
           </div>
           {/* Emoji picker for reactions */}

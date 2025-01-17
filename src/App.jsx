@@ -15,22 +15,11 @@ import ProfileSidebar from './components/ProfileSidebar'
 import CreateChannelModal from './components/CreateChannelModal'
 import AddDMModal from './components/AddDMModal'
 
-
-
-const navItems = [
-  { id: 1, name: 'Messages', icon: '💬' },
-  // { id: 2, name: 'Add canvas', icon: '📝' },
-  // { id: 3, name: 'Bookmarks', icon: '🔖' },
-  // { id: 4, name: 'Pins', icon: '📌' }, 
-  // { id: 5, name: 'Files', icon: '📁' },
-]
-
 function App() {
   const { user, signOut } = useAuth()
   const [channels, setChannels] = useState([])
   const [messages, setMessages] = useState([])
   const [selectedChannel, setSelectedChannel] = useState(null)
-  const [selectedNav, setSelectedNav] = useState(navItems[0])
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [userProfile, setUserProfile] = useState(null)
   const [isTextBold, setIsTextBold] = useState(false)
@@ -88,6 +77,8 @@ function App() {
   // Add state for unread DMs
   const [unreadDMs, setUnreadDMs] = useState(new Set())
   const [selectedChannelAI, setSelectedChannelAI] = useState(false)
+  const [channelAIMessages, setChannelAIMessages] = useState([])
+  const [isChannelAILoading, setIsChannelAILoading] = useState(false)
 
   // Add ref for context menu
   const contextMenuRef = useRef(null)
@@ -145,6 +136,13 @@ function App() {
   useEffect(() => {
     scrollToBottom()
   }, [messages])
+
+  // Add useEffect for ChannelAI messages
+  useEffect(() => {
+    if (selectedChannelAI) {
+      scrollToBottom()
+    }
+  }, [channelAIMessages, isChannelAILoading])
 
   // Function to handle cursor position changes
   const handleCursorChange = (e) => {
@@ -1102,18 +1100,17 @@ function App() {
   const [aiMessages, setAiMessages] = useState([])
   const aiChatInputRef = useRef(null)
   const [isAILoading, setIsAILoading] = useState(false)
-  const [channelAIMessages, setChannelAIMessages] = useState([])
-  const [isChannelAILoading, setIsChannelAILoading] = useState(false)
 
   // Handler for sending messages in ChannelAI
   const handleChannelAIMessage = async (messageText) => {
     if (!messageText.trim()) return;
 
-    // Add user message
+    // Add user message with profile information
     const userMessage = {
       content: messageText,
       timestamp: new Date().toLocaleTimeString(),
-      isAI: false
+      isAI: false,
+      profiles: userProfile // Include the user's profile information
     };
     setChannelAIMessages(prev => [...prev, userMessage]);
 
@@ -1153,7 +1150,11 @@ function App() {
           </div>
         ) : response,
         timestamp: new Date().toLocaleTimeString(),
-        isAI: true
+        isAI: true,
+        profiles: {
+          full_name: 'ChannelAI',
+          avatar_url: null
+        }
       };
       setChannelAIMessages(prev => [...prev, aiMessage]);
     } catch (error) {
@@ -1162,7 +1163,11 @@ function App() {
         content: "Sorry, I couldn't process your message. Please try again.",
         timestamp: new Date().toLocaleTimeString(),
         isAI: true,
-        isError: true
+        isError: true,
+        profiles: {
+          full_name: 'ChannelAI',
+          avatar_url: null
+        }
       };
       setChannelAIMessages(prev => [...prev, errorMessage]);
     } finally {
@@ -1224,8 +1229,8 @@ function App() {
                 }}
                 className={`w-full text-left px-2 py-1 rounded text-gray-300 ${
                   selectedChannelAI 
-                    ? 'bg-sidebar-active text-white' 
-                    : 'hover:bg-sidebar-hover hover:text-white'
+                    ? 'bg-purple-800 text-white' 
+                    : 'hover:bg-purple-800 hover:text-white'
                 } flex items-center space-x-2`}
               >
                 <Icons.AI className="w-4 h-4" />
@@ -1344,7 +1349,7 @@ function App() {
                 <input
                   type="text"
                   placeholder="Search Workspace"
-                  className="w-full bg-sidebar-light text-white placeholder-gray-300 rounded-md py-1.5 px-4 pl-10 focus:outline-none focus:ring-2 focus:ring-gray-400"
+                  className="w-full bg-sidebar-hover/70 text-white placeholder-gray-300 rounded-md py-1.5 px-4 pl-10 focus:outline-none focus:ring-2 focus:ring-gray-400 border border-gray-600"
                 />
                 <div className="absolute left-3 top-2">
                   <Icons.Search />
@@ -1445,22 +1450,6 @@ function App() {
                 />
               </div>
             </div>
-            {/* Navigation Tabs */}
-            <div className="px-4 flex items-center space-x-4 text-sm">
-              {navItems.map(item => (
-                <button
-                  key={item.id}
-                  onClick={() => setSelectedNav(item)}
-                  className={`px-3 py-2 hover:bg-gray-100 ${
-                    selectedNav.id === item.id ? 'border-b-2 border-purple-600' : ''
-                  }`}
-                >
-                  <span className="mr-2">{item.icon}</span>
-                  {item.name}
-                </button>
-              ))}
-              <button className="ml-auto text-xl">+</button>
-            </div>
           </div>
 
           {/* Messages Area */}
@@ -1468,33 +1457,45 @@ function App() {
             {selectedChannelAI ? (
               <div className="p-4 space-y-4">
                 {channelAIMessages.map((message, index) => (
-                  <div key={index} className="flex items-start space-x-3 hover:bg-gray-50 rounded-lg p-2 transition-colors duration-150">
-                    <div className="flex-1 shadow-message rounded-lg p-3 bg-white">
+                  <div key={index} className="flex items-start space-x-3 group relative hover:bg-gray-50 p-2 rounded-lg message-container">
+                    {message.profiles?.avatar_url ? (
+                      <img
+                        src={message.profiles.avatar_url}
+                        alt={message.profiles.full_name}
+                        className="w-9 h-9 rounded-full object-cover flex-shrink-0"
+                      />
+                    ) : (
+                      <div className={`w-9 h-9 rounded-full ${message.isAI ? 'bg-gray-300' : 'bg-purple-700'} flex items-center justify-center text-white flex-shrink-0`}>
+                        {message.isAI ? 'AI' : message.profiles?.full_name?.[0].toUpperCase()}
+                      </div>
+                    )}
+                    <div className="flex-1">
                       <div className="flex items-baseline space-x-2">
-                        <span className="font-medium">
-                          {message.isAI ? 'ChannelAI' : 'You'}
+                        <span className="font-bold">
+                          {message.profiles?.full_name}
                         </span>
                         <span className="text-xs text-gray-500">
                           {message.timestamp}
                         </span>
                       </div>
-                      <div className="mt-1 text-gray-900">{message.content}</div>
+                      <div className="text-gray-900 mt-1">{message.content}</div>
                     </div>
                   </div>
                 ))}
                 {isChannelAILoading && (
-                  <div className="flex items-start space-x-3">
-                    <div className="w-8 h-8 rounded-full bg-purple-700 flex items-center justify-center text-white">
+                  <div className="flex items-start space-x-3 group relative hover:bg-gray-50 p-2 rounded-lg message-container">
+                    <div className="w-9 h-9 rounded-full bg-gray-300 flex items-center justify-center text-white flex-shrink-0">
                       <Icons.AI className="w-5 h-5" />
                     </div>
                     <div className="flex-1">
                       <div className="flex items-baseline space-x-2">
-                        <span className="font-medium">ChannelAI</span>
+                        <span className="font-bold">ChannelAI</span>
                       </div>
                       <div className="mt-1 text-gray-500">Thinking...</div>
                     </div>
                   </div>
                 )}
+                <div ref={messagesEndRef} />
               </div>
             ) : (
               <MessageList
