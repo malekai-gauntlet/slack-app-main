@@ -1410,7 +1410,7 @@ function App() {
                       I'm an AI trained on all messages & files in the public channels. Ask me questions like: 
                       <br />
                       <span className="text-sm text-gray-500 mt-1 max-w-xl">
-                        • <em>"Gather all resources shared the past week"</em> <br/>•
+                        • <em>"Gather all resources shared the past week"</em> <br/>• <em>"Tell me about our company mission"</em>
                       </span>
                     </p>
                   </div>

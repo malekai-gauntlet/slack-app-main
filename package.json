@@ -12,13 +12,19 @@
   },
   "dependencies": {
     "@langchain/core": "^0.3.30",
-    "@langchain/openai": "^0.3.17",
-    "@pinecone-database/pinecone": "^4.1.0",
-    "@supabase/supabase-js": "^2.47.12",
+    "@langchain/openai": "^0.0.14",
+    "@langchain/pinecone": "^0.0.3",
+    "@pinecone-database/pinecone": "^2.2.2",
+    "@supabase/supabase-js": "^2.47.14",
+    "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "emoji-picker-react": "^4.12.0",
-    "langchain": "^0.3.11",
+    "express": "^4.21.2",
+    "langchain": "^0.1.21",
     "langsmith": "^0.2.15",
+    "node-cron": "^3.0.3",
+    "node-fetch": "^3.3.2",
+    "pdf-parse": "^1.1.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
@@ -42,3 +48,5 @@
     "vite": "^6.0.7"
   }
 }
+
+
