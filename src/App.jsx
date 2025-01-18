@@ -49,6 +49,11 @@ function App() {
   const [isEditingStatus, setIsEditingStatus] = useState(false)
   const [statusText, setStatusText] = useState('')
   const [threadMessages, setThreadMessages] = useState([])
+  const [threadTextSegments, setThreadTextSegments] = useState([{ text: '', isBold: false, isItalic: false, isStrikethrough: false }])
+  const [isThreadTextBold, setIsThreadTextBold] = useState(false)
+  const [isThreadTextItalic, setIsThreadTextItalic] = useState(false)
+  const [isThreadTextStrikethrough, setIsThreadTextStrikethrough] = useState(false)
+  const threadInputRef = useRef(null)
   const [showProfileSidebar, setShowProfileSidebar] = useState(false)
   const [isEditingName, setIsEditingName] = useState(false)
   const [editedName, setEditedName] = useState('')
@@ -906,7 +911,7 @@ function App() {
         .from('messages')
         .insert([
           {
-            content: formatMessageContent(textSegments),
+            content: formatMessageContent(threadTextSegments),
             user_id: user.id,
             channel_id: selectedChannel.id,
             parent_id: selectedMessage.id // Reference to the original message
@@ -926,8 +931,11 @@ function App() {
       if (error) throw error
 
       setThreadMessages([...threadMessages, data[0]])
-      // Reset input
-      setTextSegments([{ text: '', isBold: false, isItalic: false, isStrikethrough: false }])
+      // Reset thread input
+      setThreadTextSegments([{ text: '', isBold: false, isItalic: false, isStrikethrough: false }])
+      setIsThreadTextBold(false)
+      setIsThreadTextItalic(false)
+      setIsThreadTextStrikethrough(false)
     } catch (error) {
       console.error('Error sending thread message:', error)
     }
@@ -963,6 +971,78 @@ function App() {
     } catch (error) {
       console.error('Error fetching thread messages:', error)
     }
+  }
+
+  // Thread-specific handlers
+  const handleThreadTextInput = (e) => {
+    const newText = e.target.value
+    setThreadTextSegments([{
+      text: newText,
+      isBold: isThreadTextBold,
+      isItalic: isThreadTextItalic,
+      isStrikethrough: isThreadTextStrikethrough
+    }])
+  }
+
+  const getThreadCombinedText = () => {
+    return threadTextSegments.map(segment => segment.text).join('')
+  }
+
+  const handleThreadBoldClick = () => {
+    setIsThreadTextBold(!isThreadTextBold)
+    setThreadTextSegments(prev => {
+      const newSegments = [...prev]
+      if (newSegments[newSegments.length - 1].text === '') {
+        newSegments[newSegments.length - 1].isBold = !isThreadTextBold
+        newSegments[newSegments.length - 1].isItalic = isThreadTextItalic
+      } else {
+        newSegments.push({ 
+          text: '', 
+          isBold: !isThreadTextBold,
+          isItalic: isThreadTextItalic
+        })
+      }
+      return newSegments
+    })
+    threadInputRef.current?.focus()
+  }
+
+  const handleThreadItalicClick = () => {
+    setIsThreadTextItalic(!isThreadTextItalic)
+    setThreadTextSegments(prev => {
+      const newSegments = [...prev]
+      if (newSegments[newSegments.length - 1].text === '') {
+        newSegments[newSegments.length - 1].isItalic = !isThreadTextItalic
+        newSegments[newSegments.length - 1].isBold = isThreadTextBold
+      } else {
+        newSegments.push({ 
+          text: '', 
+          isItalic: !isThreadTextItalic,
+          isBold: isThreadTextBold
+        })
+      }
+      return newSegments
+    })
+    threadInputRef.current?.focus()
+  }
+
+  const handleThreadStrikethroughClick = () => {
+    setIsThreadTextStrikethrough(!isThreadTextStrikethrough)
+    setThreadTextSegments(prev => {
+      const newSegments = [...prev]
+      if (newSegments[newSegments.length - 1].text === '') {
+        newSegments[newSegments.length - 1].isStrikethrough = !isThreadTextStrikethrough
+      } else {
+        newSegments.push({ 
+          text: '', 
+          isStrikethrough: !isThreadTextStrikethrough,
+          isBold: isThreadTextBold,
+          isItalic: isThreadTextItalic
+        })
+      }
+      return newSegments
+    })
+    threadInputRef.current?.focus()
   }
 
   // Add handler for profile button click
@@ -1446,12 +1526,10 @@ function App() {
         />
       </div>
 
-      {/* Main Content + Thread Sidebar Container */}
+      {/* Main Content Container */}
       <div className="flex-1 flex overflow-hidden">
         {/* Main Content */}
-        <div className={`flex-1 flex flex-col bg-white min-w-0 shadow-soft ${
-          showThreadSidebar || showAIChatSidebar ? 'max-w-[calc(100%-600px)]' : ''
-        }`}>
+        <div className="flex-1 flex flex-col bg-white min-w-0 shadow-soft">
           {/* Search Bar */}
           <div className="bg-topbar-gradient px-4 py-2 flex items-center justify-between">
             <div className="flex items-center space-x-2">
@@ -1685,28 +1763,28 @@ function App() {
           </div>
         </div>
 
-        {/* Thread Sidebar */}
+        {/* Thread Sidebar - Now outside the main content container */}
         <ThreadSidebar
           showThreadSidebar={showThreadSidebar}
           selectedMessage={selectedMessage}
           threadMessages={threadMessages}
           setShowThreadSidebar={setShowThreadSidebar}
           handleSendThreadMessage={handleSendThreadMessage}
-          isTextBold={isTextBold}
-          isTextItalic={isTextItalic}
-          isTextStrikethrough={isTextStrikethrough}
-          handleTextInput={handleTextInput}
-          getCombinedText={getCombinedText}
+          isTextBold={isThreadTextBold}
+          isTextItalic={isThreadTextItalic}
+          isTextStrikethrough={isThreadTextStrikethrough}
+          handleTextInput={handleThreadTextInput}
+          getCombinedText={getThreadCombinedText}
           handleUtilityClick={handleUtilityClick}
           handleEmojiButtonClick={handleEmojiButtonClick}
           showEmojiPicker={showEmojiPicker}
           onEmojiClick={onEmojiClick}
-          inputRef={inputRef}
+          inputRef={threadInputRef}
           fileInputRef={fileInputRef}
           handleFileSelect={handleFileSelect}
-          handleBoldClick={() => setIsTextBold(!isTextBold)}
-          handleItalicClick={() => setIsTextItalic(!isTextItalic)}
-          handleStrikethroughClick={() => setIsTextStrikethrough(!isTextStrikethrough)}
+          handleBoldClick={handleThreadBoldClick}
+          handleItalicClick={handleThreadItalicClick}
+          handleStrikethroughClick={handleThreadStrikethroughClick}
         />
 
         {/* AI Chat Sidebar */}
@@ -1718,7 +1796,7 @@ function App() {
           isLoading={isAILoading}
           handleSendAIMessage={async (e) => {
             e.preventDefault();
-            const messageText = getCombinedText();
+            const messageText = getThreadCombinedText();
             if (!messageText.trim()) return;
 
             // Add user message
@@ -1732,7 +1810,7 @@ function App() {
             try {
               setIsAILoading(true);
               // Clear input before awaiting response
-              setTextSegments([{ text: '', isBold: false, isItalic: false, isStrikethrough: false }]);
+              setThreadTextSegments([{ text: '', isBold: false, isItalic: false, isStrikethrough: false }]);
               
               // Get AI response
               const { response } = await fetchAIResponse(messageText);
@@ -1784,8 +1862,8 @@ function App() {
           isTextBold={isTextBold}
           isTextItalic={isTextItalic}
           isTextStrikethrough={isTextStrikethrough}
-          handleTextInput={handleTextInput}
-          getCombinedText={getCombinedText}
+          handleTextInput={handleThreadTextInput}
+          getCombinedText={getThreadCombinedText}
           handleUtilityClick={handleUtilityClick}
           handleEmojiButtonClick={handleEmojiButtonClick}
           showEmojiPicker={showEmojiPicker}
@@ -1793,9 +1871,9 @@ function App() {
           inputRef={aiChatInputRef}
           fileInputRef={fileInputRef}
           handleFileSelect={handleFileSelect}
-          handleBoldClick={() => setIsTextBold(!isTextBold)}
-          handleItalicClick={() => setIsTextItalic(!isTextItalic)}
-          handleStrikethroughClick={() => setIsTextStrikethrough(!isTextStrikethrough)}
+          handleBoldClick={handleThreadBoldClick}
+          handleItalicClick={handleThreadItalicClick}
+          handleStrikethroughClick={handleThreadStrikethroughClick}
         />
       </div>
 

@@ -261,8 +261,11 @@ const MessageList = ({
               <EmojiPicker
                 onEmojiClick={(emojiObject) => handleReactionSelect(message.id, emojiObject)}
                 searchPlaceholder="Search all emoji"
-                width={280}
-                height={300}
+                width={350}
+                height={450}
+                emojiSize={20}
+                emojiButtonSize={28}
+                previewConfig={{ showPreview: false }}
               />
             </div>
           )}

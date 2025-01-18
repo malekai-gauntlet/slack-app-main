@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect, useRef } from 'react'
 
 const AddDMModal = ({
   showAddDM,
@@ -7,10 +7,36 @@ const AddDMModal = ({
   setHiddenDMs,
   handleDMSelect
 }) => {
+  const modalRef = useRef(null)
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (modalRef.current && !modalRef.current.contains(event.target)) {
+        setShowAddDM(false)
+      }
+    }
+
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') {
+        setShowAddDM(false)
+      }
+    }
+
+    if (showAddDM) {
+      document.addEventListener('mousedown', handleClickOutside)
+      document.addEventListener('keydown', handleEscape)
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('keydown', handleEscape)
+    }
+  }, [showAddDM, setShowAddDM])
+
   return (
     showAddDM && (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div className="bg-white rounded-lg w-[480px] shadow-xl">
+        <div ref={modalRef} className="bg-white rounded-lg w-[480px] shadow-xl">
           {/* Modal Header */}
           <div className="px-6 py-4 border-b">
             <div className="flex items-center justify-between">

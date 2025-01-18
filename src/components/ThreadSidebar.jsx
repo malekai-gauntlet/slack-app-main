@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { Icons } from './icons'
 import EmojiPicker from 'emoji-picker-react'
 
@@ -24,9 +24,25 @@ const ThreadSidebar = ({
   handleItalicClick,
   handleStrikethroughClick
 }) => {
+  useEffect(() => {
+    const handleEscape = (event) => {
+      if (event.key === 'Escape' && showThreadSidebar) {
+        setShowThreadSidebar(false)
+      }
+    }
+
+    if (showThreadSidebar) {
+      document.addEventListener('keydown', handleEscape)
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleEscape)
+    }
+  }, [showThreadSidebar, setShowThreadSidebar])
+
   return (
     <div 
-      className={`fixed right-0 top-0 bottom-0 w-[600px] border-l border-gray-200 bg-white flex flex-col transition-all duration-300 ease-in-out ${
+      className={`fixed right-0 top-[104px] bottom-0 w-[400px] border-l border-gray-200 bg-white flex flex-col transition-all duration-300 ease-in-out ${
         showThreadSidebar ? 'translate-x-0' : 'translate-x-full'
       }`}
     >
@@ -280,22 +296,7 @@ const ThreadSidebar = ({
                 title="Numbered List"
                 onClick={handleUtilityClick}
               >
-                <Icons.NumberedList />
-              </button>
-              <button
-                type="button"
-                className="p-1 hover:bg-gray-100 rounded"
-                title="Bulleted List"
-                onClick={handleUtilityClick}
-              >
-                <Icons.BulletedList />
-              </button>
-              <button
-                type="button"
-                className="p-1 hover:bg-gray-100 rounded"
-                title="Code Block"
-                onClick={handleUtilityClick}
-              >
+
                 <Icons.CodeBlock />
               </button>
               <button
@@ -304,7 +305,7 @@ const ThreadSidebar = ({
                 title="Quote"
                 onClick={handleUtilityClick}
               >
-                <Icons.Quote />
+              
               </button>
             </div>
             {/* Message Input */}
