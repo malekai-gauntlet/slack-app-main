@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react'
+import React, { useRef, useState, useEffect } from 'react'
 import { Icons } from './icons'
 import FormattingToolbar from './FormattingToolbar'
 import EmojiPicker from 'emoji-picker-react'
@@ -32,6 +32,32 @@ export default function MessageInput({
   const audioChunksRef = useRef([])
   const [recordedAudio, setRecordedAudio] = useState(null)
   const [isTranscribing, setIsTranscribing] = useState(false)
+
+  // Add click outside handler
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (emojiPickerRef.current && !emojiPickerRef.current.contains(event.target)) {
+        handleEmojiButtonClick()
+      }
+    }
+
+    // Add escape key handler
+    function handleEscapeKey(event) {
+      if (event.key === 'Escape' && showEmojiPicker) {
+        handleEmojiButtonClick()
+      }
+    }
+
+    if (showEmojiPicker) {
+      document.addEventListener('mousedown', handleClickOutside)
+      document.addEventListener('keydown', handleEscapeKey)
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('keydown', handleEscapeKey)
+    }
+  }, [showEmojiPicker, handleEmojiButtonClick])
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -180,13 +206,13 @@ export default function MessageInput({
         </div>
       </div>
 
-      <div className="border rounded-md flex flex-col mt-2">
+      <div className="flex flex-col mt-2">
         {selectedFile && (
           <div className="px-4 pt-3">
             <FilePreview file={selectedFile} onRemove={onRemoveFile} />
           </div>
         )}
-        <div className="flex">
+        <div className="flex border rounded-md focus-within:ring-1 focus-within:ring-purple-500 focus-within:border-purple-500 transition-all duration-150">
           <input
             ref={inputRef}
             type="text"
@@ -194,7 +220,7 @@ export default function MessageInput({
             onChange={handleTextInput}
             onKeyDown={handleKeyDown}
             placeholder={isRecording ? 'Recording...' : isTranscribing ? 'Transcribing...' : placeholder}
-            className={`flex-1 px-4 py-2 focus:ring-1 focus:ring-purple-200 [caret-color:black] ${isTextBold ? 'font-bold' : ''} ${isTextItalic ? 'italic' : ''} ${isTextStrikethrough ? 'line-through' : ''}`}
+            className={`flex-1 px-4 py-2 focus:outline-none [caret-color:black] ${isTextBold ? 'font-bold' : ''} ${isTextItalic ? 'italic' : ''} ${isTextStrikethrough ? 'line-through' : ''}`}
             style={{ caretColor: 'black' }}
           />
           <button
@@ -202,7 +228,20 @@ export default function MessageInput({
             className="px-4 py-2 text-gray-400 hover:text-purple-600 focus:outline-none transition-colors duration-150"
             onClick={onSendMessage}
           >
-            <Icons.Send />
+            <svg 
+              xmlns="http://www.w3.org/2000/svg" 
+              viewBox="0 0 24 24" 
+              fill="none" 
+              stroke="currentColor" 
+              className="w-5 h-5 rotate-90"
+            >
+              <path 
+                strokeLinecap="round" 
+                strokeLinejoin="round" 
+                strokeWidth={2} 
+                d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" 
+              />
+            </svg>
           </button>
         </div>
       </div>
@@ -236,8 +275,11 @@ export default function MessageInput({
               <EmojiPicker
                 onEmojiClick={onEmojiClick}
                 searchPlaceholder="Search all emoji"
-                width={280}
-                height={300}
+                width={350}
+                height={450}
+                emojiSize={20}
+                emojiButtonSize={28}
+                previewConfig={{ showPreview: false }}
               />
             </div>
           )}

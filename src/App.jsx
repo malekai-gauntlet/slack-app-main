@@ -1044,12 +1044,14 @@ function App() {
   }
 
   // Add handler for DM selection
-  const handleDMSelect = async (user) => {
-    setSelectedDM(user)
+  const handleDMSelect = async (dmUser) => {
+    // Ensure the user profile has the correct user_id for self-DMs
+    const selectedUser = dmUser.user_id === user.id ? { ...dmUser, user_id: user.id } : dmUser
+    setSelectedDM(selectedUser)
     setSelectedChannel(null)
     setSelectedChannelAI(false)
     setMessages([]) // Clear messages for now
-    markDMAsRead(user.user_id) // Mark DM as read when selected
+    markDMAsRead(selectedUser.user_id) // Mark DM as read when selected
   }
 
   // Add handler for creating a new channel
@@ -1311,7 +1313,7 @@ function App() {
         <div className={`p-3 flex items-center justify-between border-b border-gray-700 ${
           !isSidebarOpen && 'opacity-0'
         }`}>
-          <h1 className="font-bold text-lg">ChatAI</h1>
+          <h1 className="font-['Dancing_Script'] text-2xl tracking-wide">ChatAI</h1>
           <button 
             onClick={() => setIsSidebarOpen(false)}
             className="text-gray-400 hover:text-white text-2xl"

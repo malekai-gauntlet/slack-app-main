@@ -71,7 +71,11 @@ const DirectMessagesList = ({
         
         {/* Current User */}
         <button
-          className="w-full text-left px-2 py-1 rounded text-gray-300 hover:bg-purple-800 flex items-center mt-2 relative group"
+          onClick={() => handleDMSelect(userProfile)}
+          onContextMenu={(e) => handleDMContextMenu(e, user.id)}
+          className={`w-full text-left px-2 py-1 rounded text-gray-300 hover:bg-purple-800 flex items-center mt-2 relative group ${
+            selectedDM?.user_id === user.id ? 'bg-purple-700' : ''
+          }`}
         >
           <div className="flex items-center min-w-0 flex-1">
             {userProfile?.avatar_url ? (
