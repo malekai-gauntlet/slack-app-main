@@ -338,12 +338,9 @@ function App() {
     focusInput()
   }
 
-  // If no user is logged in, show the Auth component
-  if (!user) {
-    return <Auth />
-  }
-
   useEffect(() => {
+    if (!user) return; // Early return in useEffect if no user
+    
     fetchUserProfile()
     fetchUsers()
     
@@ -1181,6 +1178,11 @@ function App() {
     setShowReactionPicker(null);
   }
 
+  // Move the Auth check here, after all hooks are declared
+  if (!user) {
+    return <Auth />
+  }
+
   return (
     <div className="flex h-screen">
       {/* Left Sidebar */}
@@ -1408,7 +1410,7 @@ function App() {
                       I'm an AI trained on all messages & files in the public channels. Ask me questions like: 
                       <br />
                       <span className="text-sm text-gray-500 mt-1 max-w-xl">
-                        • <em>"Gather all resources shared the past week"</em> <br/>• <em>"Aggregate all Gauntlet accounts and API keys"</em>
+                        • <em>"Gather all resources shared the past week"</em> <br/>•
                       </span>
                     </p>
                   </div>
