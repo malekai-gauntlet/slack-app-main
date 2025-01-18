@@ -621,6 +621,9 @@ function App() {
 
             if (shouldAddMessage) {
               try {
+                // Don't add thread replies to the main message list
+                if (payload.new.parent_id) return;
+
                 // Fetch the user's profile
                 const { data: profileData, error: profileError } = await supabase
                   .from('profiles')
@@ -662,6 +665,30 @@ function App() {
               setMessages(currentMessages => 
                 currentMessages.filter(message => message.id !== payload.old.id)
               );
+          } else if (payload.eventType === 'UPDATE') {
+            // Handle thread metadata updates
+            if (selectedDM) {
+              const isRelevantDM = (
+                (payload.new.user_id === user.id && payload.new.dm_user_id === selectedDM.user_id) ||
+                (payload.new.user_id === selectedDM.user_id && payload.new.dm_user_id === user.id)
+              );
+              if (!isRelevantDM) return;
+            } else {
+              if (payload.new.channel_id !== selectedChannel.id) return;
+            }
+
+            setMessages(currentMessages => 
+              currentMessages.map(message => 
+                message.id === payload.new.id 
+                  ? { 
+                      ...message, 
+                      has_thread: payload.new.has_thread,
+                      thread_participant_count: payload.new.thread_participant_count,
+                      last_reply_at: payload.new.last_reply_at
+                    }
+                  : message
+              )
+            );
           }
         }
       )
@@ -720,7 +747,7 @@ function App() {
       if (selectedDM) {
         console.log('Fetching DM messages with:', selectedDM.full_name);
       } else {
-      console.log('Fetching messages for channel:', selectedChannel.id);
+        console.log('Fetching messages for channel:', selectedChannel.id);
       }
 
       // Build the query based on whether we're in a channel or DM
@@ -732,7 +759,10 @@ function App() {
             id,
             emoji,
             user_id
-          )
+          ),
+          has_thread,
+          thread_participant_count,
+          last_reply_at
         `)
         .is('deleted_at', null)
         .order('created_at', { ascending: true });
@@ -897,7 +927,13 @@ function App() {
 
   // Add handler for thread button click
   const handleThreadClick = (message) => {
+    if (showThreadSidebar && selectedMessage?.id === message.id) {
+      // If clicking the same message's thread text while sidebar is open, close it
+      setShowThreadSidebar(false);
+      return;
+    }
     setSelectedMessage(message);
+    setThreadMessages([]); // Clear thread messages before loading new ones
     setShowThreadSidebar(true);
   }
 
@@ -907,30 +943,54 @@ function App() {
     if (!selectedMessage) return
 
     try {
-      const { data, error } = await supabase
+      // First, send the thread reply
+      const { data: replyData, error: replyError } = await supabase
         .from('messages')
         .insert([
           {
             content: formatMessageContent(threadTextSegments),
             user_id: user.id,
             channel_id: selectedChannel.id,
-            parent_id: selectedMessage.id // Reference to the original message
+            parent_id: selectedMessage.id
           }
         ])
-        .select(`
-          id,
-          content,
-          created_at,
-          user_id,
-          profiles!messages_user_id_fkey (
-            full_name,
-            avatar_url
-          )
-        `)
+        .select()  // Just select all fields without trying to join profiles yet
 
-      if (error) throw error
+      if (replyError) throw replyError
 
-      setThreadMessages([...threadMessages, data[0]])
+      // Then fetch the profile data separately
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('full_name, avatar_url')
+        .eq('user_id', user.id)
+        .single()
+
+      // Combine message and profile data
+      const enrichedReplyData = {
+        ...replyData[0],
+        profiles: profileData
+      }
+
+      // Then, update the parent message's thread metadata
+      const { data: threadReplies } = await supabase
+        .from('messages')
+        .select('id')
+        .eq('parent_id', selectedMessage.id)
+
+      const replyCount = threadReplies ? threadReplies.length : 0;
+
+      const { error: updateError } = await supabase
+        .from('messages')
+        .update({
+          has_thread: true,
+          thread_participant_count: replyCount,  // Now using actual reply count
+          last_reply_at: new Date().toISOString()
+        })
+        .eq('id', selectedMessage.id)
+
+      if (updateError) throw updateError
+
+      setThreadMessages([...threadMessages, enrichedReplyData])
       // Reset thread input
       setThreadTextSegments([{ text: '', isBold: false, isItalic: false, isStrikethrough: false }])
       setIsThreadTextBold(false)
@@ -951,27 +1011,41 @@ function App() {
   // Function to fetch thread messages
   const fetchThreadMessages = async () => {
     try {
-      const { data, error } = await supabase
+      // First, fetch the messages
+      const { data: messagesData, error: messagesError } = await supabase
         .from('messages')
-        .select(`
-          id,
-          content,
-          created_at,
-          user_id,
-          profiles!messages_user_id_fkey (
-            full_name,
-            avatar_url
-          )
-        `)
+        .select('*')
         .eq('parent_id', selectedMessage.id)
-        .order('created_at', { ascending: true })
+        .order('created_at', { ascending: true });
 
-      if (error) throw error
-      setThreadMessages(data)
+      if (messagesError) throw messagesError;
+
+      // Then fetch the profiles for these messages
+      const userIds = [...new Set(messagesData.map(message => message.user_id))];
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('*')
+        .in('user_id', userIds);
+
+      if (profilesError) throw profilesError;
+
+      // Create a map of profiles for faster lookup
+      const profileMap = new Map(profilesData.map(profile => [profile.user_id, profile]));
+
+      // Combine messages with their profile data
+      const enrichedMessages = messagesData.map(message => ({
+        ...message,
+        profiles: profileMap.get(message.user_id) || {
+          full_name: 'Anonymous',
+          avatar_url: null
+        }
+      }));
+
+      setThreadMessages(enrichedMessages);
     } catch (error) {
-      console.error('Error fetching thread messages:', error)
+      console.error('Error fetching thread messages:', error);
     }
-  }
+  };
 
   // Thread-specific handlers
   const handleThreadTextInput = (e) => {

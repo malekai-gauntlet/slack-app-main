@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useRef } from 'react'
 import { Icons } from './icons'
 import EmojiPicker from 'emoji-picker-react'
 
@@ -24,6 +24,17 @@ const ThreadSidebar = ({
   handleItalicClick,
   handleStrikethroughClick
 }) => {
+  const threadMessagesEndRef = useRef(null)
+  const sidebarRef = useRef(null)
+
+  const scrollToBottom = () => {
+    threadMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }
+
+  useEffect(() => {
+    scrollToBottom()
+  }, [threadMessages])
+
   useEffect(() => {
     const handleEscape = (event) => {
       if (event.key === 'Escape' && showThreadSidebar) {
@@ -40,8 +51,22 @@ const ThreadSidebar = ({
     }
   }, [showThreadSidebar, setShowThreadSidebar])
 
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (sidebarRef.current && !sidebarRef.current.contains(event.target) && showThreadSidebar) {
+        setShowThreadSidebar(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showThreadSidebar, setShowThreadSidebar])
+
   return (
     <div 
+      ref={sidebarRef}
       className={`fixed right-0 top-[104px] bottom-0 w-[400px] border-l border-gray-200 bg-white flex flex-col transition-all duration-300 ease-in-out ${
         showThreadSidebar ? 'translate-x-0' : 'translate-x-full'
       }`}
@@ -249,6 +274,7 @@ const ThreadSidebar = ({
             </div>
           </div>
         ))}
+        <div ref={threadMessagesEndRef} />
       </div>
 
       {/* Reply Input */}

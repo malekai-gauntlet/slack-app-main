@@ -226,6 +226,23 @@ const MessageList = ({
                 </button>
               ))}
             </div>
+
+            {/* Thread metadata */}
+            {message.has_thread && (
+              <div className="mt-1 text-sm text-gray-500 flex items-center space-x-2">
+                <Icons.Thread className="w-4 h-4" />
+                <button
+                  onClick={(e) => {
+                    e.preventDefault()
+                    handleThreadClick(message)
+                  }}
+                  className="hover:underline cursor-pointer"
+                >
+                  {message.thread_participant_count} {message.thread_participant_count === 1 ? 'reply' : 'replies'}
+                  {message.last_reply_at && ` • Last reply ${new Date(message.last_reply_at).toLocaleTimeString()}`}
+                </button>
+              </div>
+            )}
           </div>
           {/* Reaction and Thread buttons */}
           <div className="opacity-0 group-hover:opacity-100 absolute right-2 top-2 flex items-center space-x-2">

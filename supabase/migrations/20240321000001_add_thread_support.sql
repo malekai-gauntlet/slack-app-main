@@ -17,7 +17,7 @@ BEGIN
   UPDATE messages
   SET 
     thread_participant_count = (
-      SELECT COUNT(DISTINCT user_id) 
+      SELECT COUNT(*) 
       FROM messages 
       WHERE parent_message_id = NEW.parent_message_id
     ),
@@ -88,7 +88,7 @@ BEGIN
   UPDATE messages
   SET 
     thread_participant_count = (
-      SELECT COUNT(DISTINCT user_id) 
+      SELECT COUNT(*) 
       FROM messages 
       WHERE parent_message_id = OLD.parent_message_id
       AND id != OLD.id
