@@ -160,7 +160,7 @@ export default function MessageInput({
 
   return (
     <div className="flex flex-col">
-      <div className="flex items-center h-10 px-2 border-b border-gray-200">
+      <div className="flex items-center h-8 px-2">
         <div className="flex items-center space-x-1">
           <button
             type="button"
@@ -185,23 +185,6 @@ export default function MessageInput({
             onClick={handleStrikethroughClick}
           >
             <span className="line-through text-gray-600">S</span>
-          </button>
-          <div className="h-4 w-px bg-gray-200 mx-1"></div>
-          <button
-            type="button"
-            className="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100"
-            title="Link"
-            onClick={handleUtilityClick}
-          >
-            <Icons.Link className="w-4 h-4 text-gray-600" />
-          </button>
-          <button
-            type="button"
-            className="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100"
-            title="Code Block"
-            onClick={handleUtilityClick}
-          >
-            <Icons.CodeBlock className="w-4 h-4 text-gray-600" />
           </button>
         </div>
       </div>
@@ -284,14 +267,14 @@ export default function MessageInput({
             </div>
           )}
         </div>
-        <button
+        {/* <button
           type="button"
           className="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100"
           title="Mention someone"
           onClick={handleUtilityClick}
         >
           <Icons.Mention className="w-4 h-4" />
-        </button>
+        </button> */}
         <button
           type="button"
           className={`w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100 ${isRecording ? 'bg-red-50' : ''}`}

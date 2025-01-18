@@ -282,10 +282,10 @@ const ThreadSidebar = ({
         <form onSubmit={handleSendThreadMessage}>
           <div className="flex flex-col">
             {/* Formatting Toolbar */}
-            <div className="flex items-center space-x-2 mb-2 border-b pb-2">
+            <div className="flex items-center space-x-2 mb-2">
               <button
                 type="button"
-                className={`p-1 hover:bg-gray-100 rounded ${isTextBold ? 'bg-gray-200' : ''}`}
+                className={`w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100 ${isTextBold ? 'bg-gray-200' : ''}`}
                 title="Bold"
                 onClick={handleBoldClick}
               >
@@ -293,7 +293,7 @@ const ThreadSidebar = ({
               </button>
               <button
                 type="button"
-                className={`p-1 hover:bg-gray-100 rounded ${isTextItalic ? 'bg-gray-200' : ''}`}
+                className={`w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100 ${isTextItalic ? 'bg-gray-200' : ''}`}
                 title="Italic"
                 onClick={handleItalicClick}
               >
@@ -301,20 +301,19 @@ const ThreadSidebar = ({
               </button>
               <button
                 type="button"
-                className={`p-1 hover:bg-gray-100 rounded ${isTextStrikethrough ? 'bg-gray-200' : ''}`}
+                className={`w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100 ${isTextStrikethrough ? 'bg-gray-200' : ''}`}
                 title="Strikethrough"
                 onClick={handleStrikethroughClick}
               >
                 <span className="line-through">S</span>
               </button>
-              <div className="h-4 w-px bg-gray-300 mx-2"></div>
               <button
                 type="button"
                 className="p-1 hover:bg-gray-100 rounded"
                 title="Link"
                 onClick={handleUtilityClick}
               >
-                <Icons.Link />
+                {/* <Icons.Link />
               </button>
               <button
                 type="button"
@@ -330,7 +329,7 @@ const ThreadSidebar = ({
                 className="p-1 hover:bg-gray-100 rounded"
                 title="Quote"
                 onClick={handleUtilityClick}
-              >
+              > */}
               
               </button>
             </div>
@@ -347,9 +346,22 @@ const ThreadSidebar = ({
                 />
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-purple-600 text-white rounded-r-md hover:bg-purple-700 focus:outline-none"
+                  className="px-4 py-2 text-gray-400 hover:text-purple-600 focus:outline-none transition-colors duration-150"
                 >
-                  Send
+                  <svg 
+                    xmlns="http://www.w3.org/2000/svg" 
+                    viewBox="0 0 24 24" 
+                    fill="none" 
+                    stroke="currentColor" 
+                    className="w-5 h-5 rotate-90"
+                  >
+                    <path 
+                      strokeLinecap="round" 
+                      strokeLinejoin="round" 
+                      strokeWidth={2} 
+                      d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" 
+                    />
+                  </svg>
                 </button>
               </div>
               {/* Utility Buttons */}
@@ -388,14 +400,14 @@ const ThreadSidebar = ({
                     </div>
                   )}
                 </div>
-                <button
+                {/* <button
                   type="button"
                   className="p-1 hover:bg-gray-100 rounded"
                   title="Mention someone"
                   onClick={handleUtilityClick}
                 >
                   <Icons.Mention />
-                </button>
+                </button> */}
                 <button
                   type="button"
                   className="p-1 hover:bg-gray-100 rounded"
