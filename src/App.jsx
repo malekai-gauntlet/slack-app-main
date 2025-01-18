@@ -944,16 +944,22 @@ function App() {
 
     try {
       // First, send the thread reply
+      const messageData = {
+        content: formatMessageContent(threadTextSegments),
+        user_id: user.id,
+        parent_id: selectedMessage.id
+      }
+
+      // Add either channel_id or dm_user_id based on context
+      if (selectedChannel) {
+        messageData.channel_id = selectedChannel.id
+      } else if (selectedDM) {
+        messageData.dm_user_id = selectedDM.user_id
+      }
+
       const { data: replyData, error: replyError } = await supabase
         .from('messages')
-        .insert([
-          {
-            content: formatMessageContent(threadTextSegments),
-            user_id: user.id,
-            channel_id: selectedChannel.id,
-            parent_id: selectedMessage.id
-          }
-        ])
+        .insert([messageData])
         .select()  // Just select all fields without trying to join profiles yet
 
       if (replyError) throw replyError
