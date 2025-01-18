@@ -1,4 +1,4 @@
-import React, { useRef } from 'react'
+import React, { useRef, useState } from 'react'
 import { Icons } from './icons'
 import FormattingToolbar from './FormattingToolbar'
 import EmojiPicker from 'emoji-picker-react'
@@ -26,11 +26,109 @@ export default function MessageInput({
   onRemoveFile
 }) {
   const emojiPickerRef = useRef(null)
+  const [isRecording, setIsRecording] = useState(false)
+  const [hasMicPermission, setHasMicPermission] = useState(null)
+  const mediaRecorderRef = useRef(null)
+  const audioChunksRef = useRef([])
+  const [recordedAudio, setRecordedAudio] = useState(null)
+  const [isTranscribing, setIsTranscribing] = useState(false)
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       onSendMessage(e)
+    }
+  }
+
+  const transcribeAudio = async (audioBlob) => {
+    try {
+      setIsTranscribing(true)
+      
+      // Create form data with audio file
+      const formData = new FormData()
+      formData.append('audio', audioBlob, 'recording.wav')
+      
+      // Send to Supabase Edge Function
+      const response = await fetch('https://kzxuqhhdfoztrgjgidak.supabase.co/functions/v1/transcribe', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          'Accept': 'application/json'
+        },
+        body: formData
+      })
+      
+      if (!response.ok) {
+        throw new Error('Transcription failed')
+      }
+      
+      const { text } = await response.json()
+      
+      // Update the input field with transcribed text
+      if (handleTextInput) {
+        const event = {
+          target: { value: text }
+        }
+        handleTextInput(event)
+        
+        // Focus the input and move cursor to end
+        if (inputRef.current) {
+          inputRef.current.focus()
+          // Use a small timeout to ensure the value is set before moving cursor
+          setTimeout(() => {
+            inputRef.current.selectionStart = inputRef.current.selectionEnd = text.length
+          }, 0)
+        }
+      }
+    } catch (error) {
+      console.error('Transcription error:', error)
+      // You might want to show an error toast here
+    } finally {
+      setIsTranscribing(false)
+      setRecordedAudio(null) // Clear the recording after transcription
+    }
+  }
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop()
+      setIsRecording(false)
+    }
+  }
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const mediaRecorder = new MediaRecorder(stream)
+      mediaRecorderRef.current = mediaRecorder
+      audioChunksRef.current = []
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data)
+        }
+      }
+
+      mediaRecorder.onstop = () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' })
+        stream.getTracks().forEach(track => track.stop())
+        // Automatically start transcription when recording stops
+        transcribeAudio(audioBlob)
+      }
+
+      mediaRecorder.start()
+      setIsRecording(true)
+    } catch (err) {
+      console.error('Error starting recording:', err)
+      setHasMicPermission(false)
+    }
+  }
+
+  const toggleRecording = async () => {
+    if (isRecording) {
+      stopRecording()
+    } else {
+      await startRecording()
     }
   }
 
@@ -74,34 +172,10 @@ export default function MessageInput({
           <button
             type="button"
             className="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100"
-            title="Numbered List"
-            onClick={handleUtilityClick}
-          >
-            <Icons.NumberedList className="w-4 h-4 text-gray-600" />
-          </button>
-          <button
-            type="button"
-            className="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100"
-            title="Bulleted List"
-            onClick={handleUtilityClick}
-          >
-            <Icons.BulletedList className="w-4 h-4 text-gray-600" />
-          </button>
-          <button
-            type="button"
-            className="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100"
             title="Code Block"
             onClick={handleUtilityClick}
           >
             <Icons.CodeBlock className="w-4 h-4 text-gray-600" />
-          </button>
-          <button
-            type="button"
-            className="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100"
-            title="Quote"
-            onClick={handleUtilityClick}
-          >
-            <Icons.Quote className="w-4 h-4 text-gray-600" />
           </button>
         </div>
       </div>
@@ -119,8 +193,9 @@ export default function MessageInput({
             value={getCombinedText()}
             onChange={handleTextInput}
             onKeyDown={handleKeyDown}
-            placeholder={placeholder}
-            className={`flex-1 px-4 py-2 focus:outline-none ${isTextBold ? 'font-bold' : ''} ${isTextItalic ? 'italic' : ''} ${isTextStrikethrough ? 'line-through' : ''}`}
+            placeholder={isRecording ? 'Recording...' : isTranscribing ? 'Transcribing...' : placeholder}
+            className={`flex-1 px-4 py-2 focus:ring-1 focus:ring-purple-200 [caret-color:black] ${isTextBold ? 'font-bold' : ''} ${isTextItalic ? 'italic' : ''} ${isTextStrikethrough ? 'line-through' : ''}`}
+            style={{ caretColor: 'black' }}
           />
           <button
             type="submit"
@@ -177,11 +252,15 @@ export default function MessageInput({
         </button>
         <button
           type="button"
-          className="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100"
-          title="Record audio"
-          onClick={handleUtilityClick}
+          className={`w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100 ${isRecording ? 'bg-red-50' : ''}`}
+          title={isRecording ? 'Stop Recording' : 'Start Recording'}
+          onClick={toggleRecording}
+          disabled={hasMicPermission === false}
         >
-          <Icons.Audio className="w-4 h-4" />
+          <Icons.Audio className={`w-4 h-4 ${isRecording ? 'text-red-500' : ''} ${hasMicPermission === false ? 'opacity-50' : ''}`} />
+          {isRecording && (
+            <span className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full"></span>
+          )}
         </button>
       </div>
     </div>

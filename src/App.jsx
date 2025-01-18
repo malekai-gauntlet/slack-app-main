@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from './supabaseClient'
 import { useAuth } from './contexts/AuthContext'
+import { debounce } from './utils/debounce'
 import Auth from './components/Auth'
 import EmojiPicker from 'emoji-picker-react'
 import MessageInput from './components/MessageInput'
@@ -14,6 +15,7 @@ import MessageList from './components/MessageList'
 import ProfileSidebar from './components/ProfileSidebar'
 import CreateChannelModal from './components/CreateChannelModal'
 import AddDMModal from './components/AddDMModal'
+import SearchResults from './components/SearchResults'
 
 function App() {
   const { user, signOut } = useAuth()
@@ -85,6 +87,13 @@ function App() {
   // Add ref for DM context menu
   const dmContextMenuRef = useRef(null)
 
+  // Add state for search
+  const [searchTerm, setSearchTerm] = useState('')
+  const [searchResults, setSearchResults] = useState([])
+  const [isSearching, setIsSearching] = useState(false)
+  const [showSearchResults, setShowSearchResults] = useState(false)
+  const searchRef = useRef(null)
+
   // Add useEffect to handle clicking outside context menu
   useEffect(() => {
     function handleClickOutside(event) {
@@ -101,6 +110,113 @@ function App() {
       document.removeEventListener('mousedown', handleClickOutside)
     }
   }, [])
+
+  // Add useEffect for click outside search results
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (searchRef.current && !searchRef.current.contains(event.target)) {
+        setShowSearchResults(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [])
+
+  // Add useEffect to auto-focus input on channel selection
+  useEffect(() => {
+    console.log('Channel selection changed, attempting to focus input')
+    if (inputRef.current) {
+      // Simple focus with a small delay to ensure DOM is ready
+      setTimeout(() => {
+        inputRef.current?.focus()
+        console.log('Input focused')
+      }, 10)
+    }
+  }, [selectedChannel, selectedDM, selectedChannelAI])
+
+  // Add debounced search function
+  const handleSearch = useCallback(
+    debounce(async (term) => {
+      if (!term.trim()) {
+        setSearchResults([])
+        setIsSearching(false)
+        return
+      }
+
+      setIsSearching(true)
+      try {
+        // First, let's just search messages without joins
+        const { data, error } = await supabase
+          .from('messages')
+          .select('*')
+          .ilike('content', `%${term}%`)
+          .order('created_at', { ascending: false })
+          .limit(20)
+
+        if (error) throw error
+
+        // If we get messages, then fetch profiles separately
+        const processedResults = await Promise.all(
+          data.map(async (message) => {
+            // Get profile info
+            const { data: profileData } = await supabase
+              .from('profiles')
+              .select('full_name, avatar_url')
+              .eq('user_id', message.user_id)
+              .single()
+
+            // Get channel info if it exists
+            let channelData = null
+            if (message.channel_id) {
+              const { data: channel } = await supabase
+                .from('channels')
+                .select('name')
+                .eq('id', message.channel_id)
+                .single()
+              channelData = channel
+            }
+
+            return {
+              ...message,
+              profiles: profileData || { full_name: 'Anonymous' },
+              channel_name: channelData?.name
+            }
+          })
+        )
+
+        setSearchResults(processedResults)
+      } catch (error) {
+        console.error('Error searching messages:', error)
+        setSearchResults([])
+      } finally {
+        setIsSearching(false)
+      }
+    }, 300),
+    []
+  )
+
+  // Add search result click handler
+  const handleSearchResultClick = (message) => {
+    // If it's a channel message
+    if (message.channel_id) {
+      const channel = channels.find(c => c.id === message.channel_id)
+      if (channel) {
+        handleChannelSelect(channel)
+      }
+    }
+    // If it's a DM
+    else if (message.dm_user_id) {
+      const dmUser = users.find(u => u.user_id === message.dm_user_id)
+      if (dmUser) {
+        handleDMSelect(dmUser)
+      }
+    }
+    setShowSearchResults(false)
+    setSearchTerm('')
+  }
 
   // Add handler for channel context menu
   const handleChannelContextMenu = (e, channelId) => {
@@ -1347,15 +1463,30 @@ function App() {
               )}
             </div>
             <div className="flex-1 max-w-3xl mx-4">
-              <div className="relative">
+              <div className="relative" ref={searchRef}>
                 <input
                   type="text"
+                  value={searchTerm}
+                  onChange={(e) => {
+                    const value = e.target.value
+                    setSearchTerm(value)
+                    handleSearch(value)
+                    setShowSearchResults(true)
+                  }}
+                  onFocus={() => setShowSearchResults(true)}
                   placeholder="Search Workspace"
                   className="w-full bg-sidebar-hover/70 text-white placeholder-gray-300 rounded-md py-1.5 px-4 pl-10 focus:outline-none focus:ring-2 focus:ring-gray-400 border border-gray-600"
                 />
                 <div className="absolute left-3 top-2">
                   <Icons.Search />
                 </div>
+                <SearchResults
+                  results={searchResults}
+                  isLoading={isSearching}
+                  visible={showSearchResults}
+                  onResultClick={handleSearchResultClick}
+                  searchTerm={searchTerm}
+                />
               </div>
             </div>
             <div className="w-8"></div> {/* Spacer for alignment */}

@@ -245,7 +245,7 @@ const MessageList = ({
                 handleThreadClick(message)
               }}
             >
-              <Icons.More />
+              <Icons.Thread />
             </button>
           </div>
           {/* Emoji picker for reactions */}
