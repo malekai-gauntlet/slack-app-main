@@ -8,7 +8,8 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test:langsmith": "tsx src/test-langsmith.ts"
+    "test:langsmith": "tsx src/test-langsmith.ts",
+    "server": "node --trace-warnings --experimental-modules server.js"
   },
   "dependencies": {
     "@langchain/core": "^0.3.30",

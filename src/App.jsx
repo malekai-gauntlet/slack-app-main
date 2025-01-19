@@ -59,7 +59,7 @@ function App() {
   const [editedName, setEditedName] = useState('')
   const nameInputRef = useRef(null)
   const [selectedFile, setSelectedFile] = useState(null)
-  const fileInputRef = useRef(null)
+  const [fileInputRef, setFileInputRef] = useState(null)
   const [showCreateChannel, setShowCreateChannel] = useState(false)
   const [newChannelName, setNewChannelName] = useState('')
   const [isCreatingChannel, setIsCreatingChannel] = useState(false)
@@ -98,6 +98,9 @@ function App() {
   const [isSearching, setIsSearching] = useState(false)
   const [showSearchResults, setShowSearchResults] = useState(false)
   const searchRef = useRef(null)
+
+  // Add state for active citation
+  const [activeCitation, setActiveCitation] = useState(null)
 
   // Add useEffect to handle clicking outside context menu
   useEffect(() => {
@@ -141,6 +144,20 @@ function App() {
       }, 10)
     }
   }, [selectedChannel, selectedDM, selectedChannelAI])
+
+  // Add click outside handler for citations
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (!event.target.closest('.citation-preview')) {
+        setActiveCitation(null)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [])
 
   // Add debounced search function
   const handleSearch = useCallback(
@@ -1399,31 +1416,79 @@ function App() {
       
       // Add AI message
       const aiMessage = {
-        content: response.blocks ? (
+        content: (
           <div>
-            {response.blocks.map((block, index) => {
-              if (block.type === 'section') {
-                return <div key={index}>{block.text.text}</div>
-              }
-              if (block.type === 'file') {
-                return (
-                  <div key={index} className="mt-2">
-                    <a 
-                      href={block.external_id}
-                      download={block.title}
-                      className="text-blue-600 hover:underline flex items-center cursor-pointer"
-                    >
-                      <Icons.File className="w-4 h-4 mr-1" />
-                      {block.title}
-                      <Icons.Download className="w-3 h-3 ml-2 text-gray-500" />
-                    </a>
-                  </div>
-                )
-              }
-              return null
-            })}
+            {(() => {
+              const sourceBlocks = [];
+              let mainContent = [];
+              let hasSourceSection = false;
+
+              response.blocks.forEach((block, index) => {
+                if (block.type === 'section') {
+                  const isSourceHeader = block.text.text === '*Sources*';
+                  const isSourceContent = block.text.text.startsWith('*[') && block.text.text.includes(']*');
+                  
+                  if (isSourceHeader) {
+                    hasSourceSection = true;
+                    mainContent.push(
+                      <div key={index} className="text-gray-700 font-semibold mt-4 mb-2">
+                        Sources from the Gauntlet AI Handbook
+                      </div>
+                    );
+                  } else if (isSourceContent) {
+                    // Remove asterisks and clean up the citation format
+                    const cleanedText = block.text.text.replace(/^\*\[(.*?)\]\*/, '[$1]');
+                    const CitationBlock = () => {
+                      const [isExpanded, setIsExpanded] = useState(false);
+                      return (
+                        <div>
+                          <button 
+                            className="w-full text-left text-gray-600 text-sm bg-gray-50 p-3 rounded-lg hover:bg-purple-50 border"
+                            onClick={() => setIsExpanded(!isExpanded)}
+                          >
+                            <div className={isExpanded ? "line-clamp-10" : "line-clamp-2"}>
+                              {cleanedText}
+                            </div>
+                          </button>
+                        </div>
+                      );
+                    };
+                    sourceBlocks.push(<CitationBlock key={index} />);
+                  } else {
+                    mainContent.push(<div key={index}>{block.text.text}</div>);
+                  }
+                } else if (block.type === 'divider') {
+                  mainContent.push(<hr key={index} className="my-4 border-t border-gray-200" />);
+                } else if (block.type === 'file') {
+                  mainContent.push(
+                    <div key={index} className="mt-2">
+                      <a 
+                        href={block.external_id}
+                        download={block.title}
+                        className="text-blue-600 hover:underline flex items-center cursor-pointer"
+                      >
+                        <Icons.File className="w-4 h-4 mr-1" />
+                        {block.title}
+                        <Icons.Download className="w-3 h-3 ml-2 text-gray-500" />
+                      </a>
+                    </div>
+                  );
+                }
+              });
+
+              return (
+                <>
+                  {mainContent}
+                  {hasSourceSection && sourceBlocks.length > 0 && (
+                    <div className="grid grid-cols-3 gap-4 mt-2">
+                      {sourceBlocks}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </div>
-        ) : response,
+        ),
         timestamp: new Date().toLocaleTimeString(),
         isAI: true,
         profiles: {
@@ -1592,7 +1657,7 @@ function App() {
               >
                 Remove DM from list
               </button>
-          </div>
+            </div>
           )}
         </div>
 
@@ -1697,11 +1762,11 @@ function App() {
                       <Icons.AI className="w-6 h-6" />
                       <h2 className="text-lg font-bold">ChannelAI</h2>
                     </div>
-                    <p className="text-sm text-gray-500 mt-1 max-w-xl">
-                      I'm an AI trained on all messages & files in the public channels. Ask me questions like: 
+                    <p className="text-sm text-gray-500 mt-1 max-w-2xl">
+                      I'm an AI trained on the GauntletAI Handbook and files in the public channels. Ask me questions like: 
                       <br />
                       <span className="text-sm text-gray-500 mt-1 max-w-xl">
-                        • <em>"Gather all resources shared the past week"</em> <br/>• <em>"Tell me about our company mission"</em>
+                        • <em>"What are the logistics for Austin? And how do brainlifts work?"</em> <br/>• <em>"Gather all resources shared the past week."</em>
                       </span>
                     </p>
                   </div>
@@ -1897,33 +1962,85 @@ function App() {
               
               // Add AI message
               const aiMessage = {
-                content: response.blocks ? (
+                content: (
                   <div>
-                    {response.blocks.map((block, index) => {
-                      if (block.type === 'section') {
-                        return <div key={index}>{block.text.text}</div>
-                      }
-                      if (block.type === 'file') {
-                        return (
-                          <div key={index} className="mt-2">
-                            <a 
-                              href={block.external_id}
-                              download={block.title}
-                              className="text-blue-600 hover:underline flex items-center cursor-pointer"
-                            >
-                              <Icons.File className="w-4 h-4 mr-1" />
-                              {block.title}
-                              <Icons.Download className="w-3 h-3 ml-2 text-gray-500" />
-                            </a>
-                          </div>
-                        )
-                      }
-                      return null
-                    })}
+                    {(() => {
+                      const sourceBlocks = [];
+                      let mainContent = [];
+                      let hasSourceSection = false;
+
+                      response.blocks.forEach((block, index) => {
+                        if (block.type === 'section') {
+                          const isSourceHeader = block.text.text === '*Sources*';
+                          const isSourceContent = block.text.text.startsWith('*[') && block.text.text.includes(']*');
+                          
+                          if (isSourceHeader) {
+                            hasSourceSection = true;
+                            mainContent.push(
+                              <div key={index} className="text-gray-700 font-semibold mt-4 mb-2">
+                                Sources from the GauntletAI Handbook
+                              </div>
+                            );
+                          } else if (isSourceContent) {
+                            // Remove asterisks and clean up the citation format
+                            const cleanedText = block.text.text.replace(/^\*\[(.*?)\]\*/, '[$1]');
+                            const CitationBlock = () => {
+                              const [isExpanded, setIsExpanded] = useState(false);
+                              return (
+                                <div>
+                                  <button 
+                                    className="w-full text-left text-gray-600 text-sm bg-gray-50 p-3 rounded-lg hover:bg-purple-50 border"
+                                    onClick={() => setIsExpanded(!isExpanded)}
+                                  >
+                                    <div className={isExpanded ? "line-clamp-10" : "line-clamp-2"}>
+                                      {cleanedText}
+                                    </div>
+                                  </button>
+                                </div>
+                              );
+                            };
+                            sourceBlocks.push(<CitationBlock key={index} />);
+                          } else {
+                            mainContent.push(<div key={index}>{block.text.text}</div>);
+                          }
+                        } else if (block.type === 'divider') {
+                          mainContent.push(<hr key={index} className="my-4 border-t border-gray-200" />);
+                        } else if (block.type === 'file') {
+                          mainContent.push(
+                            <div key={index} className="mt-2">
+                              <a 
+                                href={block.external_id}
+                                download={block.title}
+                                className="text-blue-600 hover:underline flex items-center cursor-pointer"
+                              >
+                                <Icons.File className="w-4 h-4 mr-1" />
+                                {block.title}
+                                <Icons.Download className="w-3 h-3 ml-2 text-gray-500" />
+                              </a>
+                            </div>
+                          );
+                        }
+                      });
+
+                      return (
+                        <>
+                          {mainContent}
+                          {hasSourceSection && sourceBlocks.length > 0 && (
+                            <div className="grid grid-cols-3 gap-4 mt-2">
+                              {sourceBlocks}
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
                   </div>
-                ) : response,
+                ),
                 timestamp: new Date().toLocaleTimeString(),
-                isAI: true
+                isAI: true,
+                profiles: {
+                  full_name: 'ChannelAI',
+                  avatar_url: null
+                }
               };
               setAiMessages(prev => [...prev, aiMessage]);
             } catch (error) {
@@ -1932,7 +2049,11 @@ function App() {
                 content: "Sorry, I couldn't process your message. Please try again.",
                 timestamp: new Date().toLocaleTimeString(),
                 isAI: true,
-                isError: true
+                isError: true,
+                profiles: {
+                  full_name: 'ChannelAI',
+                  avatar_url: null
+                }
               };
               setAiMessages(prev => [...prev, errorMessage]);
             } finally {
